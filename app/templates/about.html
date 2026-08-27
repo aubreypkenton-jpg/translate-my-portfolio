@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}About & methodology &mdash; Translate My Portfolio{% endblock %}
+{% block content %}
+  <header>
+    <h1>About &amp; methodology</h1>
+  </header>
+
+  <section class="about">
+    <h2>What this is</h2>
+    <p>You type in what you own &mdash; ticker, shares, and optionally what you paid and when.
+    The app fetches real price history for each holding and explains, in plain English, how
+    risky and diversified it actually is, based on what genuinely happened to those prices,
+    not a generic lesson.</p>
+
+    <h2>Why it's trustworthy</h2>
+    <p>Every sentence you see is built from a number computed from real fetched price data.
+    There's no AI model writing the explanations &mdash; they're template sentences with real
+    numbers plugged in. Nothing is invented, estimated by a language model, or guessed.</p>
+    <p>This app doesn't make money whether you buy, sell, or do nothing &mdash; there's no
+    brokerage relationship, no affiliate links, no incentive to nudge you toward activity.</p>
+
+    <h2>How each number is calculated</h2>
+    <p><strong>Concentration</strong> is simply each holding's value divided by total portfolio
+    value. A single holding above 25% of the portfolio, or a single sector above 50%, is flagged.</p>
+    <p><strong>Volatility</strong> is the annualized standard deviation of daily returns over the
+    available price history (up to 5 years).</p>
+    <p><strong>Max drawdown</strong> is the largest peak-to-trough decline in the available price
+    history for each holding, and for the portfolio as a whole (weighted by your position sizes).</p>
+    <p><strong>Correlation</strong> measures how closely two holdings' daily price moves track each
+    other, from -1 (perfectly opposite) to 1 (perfectly together). Above 0.7 is flagged as
+    meaningfully overlapping.</p>
+    <p><strong>Historical crash scenarios</strong> apply the real price change each currently-held
+    ticker experienced during the 2020 COVID crash (Feb 19 &ndash; Mar 23, 2020) and the 2022 bear
+    market (Jan 3 &ndash; Oct 12, 2022), weighted by today's position sizes. If a ticker didn't exist
+    yet during a window, it's excluded and the coverage percentage says so.</p>
+    <p><strong>Sharpe ratio</strong> is (annualized return &minus; a 4% assumed risk-free rate) divided
+    by annualized volatility, computed over the overlapping history of your holdings.</p>
+    <p><strong>Risk score (0-100)</strong> is a simple equal-weighted blend of concentration, sector
+    concentration, volatility, correlation, and max drawdown, each scaled against a fixed cap. It's a
+    heuristic meant to give you one number to watch move over time &mdash; not a calibrated
+    institutional risk model.</p>
+    <p><strong>Behavioral flags</strong> are pattern-matches against your entered purchase price and
+    date: buying more than 15% above the price from 30 trading days earlier (recency bias), holding
+    a position down more than 20% for over 180 days (loss aversion), or putting more than 20% of the
+    portfolio into something bought within the last 30 days (a fast, large bet).</p>
+    <p><strong>Tax notes</strong> are based on IRS short-term vs. long-term capital gains treatment:
+    under a year held is short-term (taxed as ordinary income), a year or more is long-term (lower
+    rate). This is general information, not tax advice &mdash; consult a real tax professional for
+    your specific situation.</p>
+
+    <h2>Data source</h2>
+    <p>Price and sector data comes from Yahoo Finance via the free <code>yfinance</code> library.
+    No API key, no paid data feed &mdash; appropriate for personal use, not institutional-scale
+    accuracy guarantees.</p>
+
+    <h2>Limitations</h2>
+    <p>This is a personal tool, not investment advice, and not a substitute for a financial advisor.
+    The risk score and thresholds are simple heuristics, not validated against formal risk models.
+    Manual entry means it only knows what you tell it &mdash; it doesn't connect to your actual
+    brokerage account.</p>
+  </section>
+{% endblock %}

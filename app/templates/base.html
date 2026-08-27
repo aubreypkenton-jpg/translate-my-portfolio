@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Translate My Portfolio{% endblock %}</title>
+  <meta name="description" content="Type in what you own and get a plain-English breakdown of risk, diversification, and your own buying patterns -- grounded in real price history, not guesses. No sign-up, nothing saved.">
+  <meta property="og:title" content="Translate My Portfolio">
+  <meta property="og:description" content="A free, honest, plain-English portfolio risk checker. No sign-up, nothing saved, no incentive to get you to trade.">
+  <meta property="og:type" content="website">
+  <meta name="theme-color" content="#0f1115">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%230f1115%22/><path d=%22M20 70 L40 45 L55 58 L80 25%22 stroke=%22%234f8cff%22 stroke-width=%228%22 fill=%22none%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/></svg>">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <a href="#main-content" class="skip-link">Skip to content</a>
+  <nav class="topnav" aria-label="Main navigation">
+    <a href="/" class="brand">Translate My Portfolio</a>
+    <a href="/about">About &amp; methodology</a>
+  </nav>
+  <div class="wrap" id="main-content">
+    {% block content %}{% endblock %}
+  </div>
+  <footer>
+    <p>Nothing here is investment advice, and nothing you enter is saved after you close the page.
+    All numbers are pulled from real market data, not generated. See the
+    <a href="/about">methodology page</a> for exactly how each number is calculated.</p>
+  </footer>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

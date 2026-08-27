@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+{% block content %}
+  <header>
+    <h1>Translate My Portfolio</h1>
+    <p class="tagline">Type in what you own. Get a plain-English breakdown of risk, diversification,
+    and your own buying patterns &mdash; grounded in real price history, not guesses.
+    No sign-up, nothing saved, no incentive to get you to trade.</p>
+  </header>
+
+  {% if errors %}
+    <div class="alert" role="alert">
+      <strong>Fix the following:</strong>
+      <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+    </div>
+  {% endif %}
+  {% if failed %}
+    <div class="alert" role="alert">Couldn't find data for: {{ failed|join(', ') }}. Check the ticker symbols.</div>
+  {% endif %}
+  {% if notes %}
+    <div class="info-note" role="status">{% for n in notes %}<p>{{ n }}</p>{% endfor %}</div>
+  {% endif %}
+
+  {% if not result %}
+    <p class="example-hint">New here? <button type="button" id="fill-example" class="link-btn">Load an example portfolio</button> to see what this looks like before typing in your own.</p>
+  {% endif %}
+
+  <form method="POST" action="/analyze" id="holdings-form" class="no-print" aria-label="Enter your holdings" enctype="multipart/form-data">
+    <table id="holdings-table">
+      <caption class="sr-only">Your holdings: ticker, shares, purchase price, and purchase date</caption>
+      <thead>
+        <tr>
+          <th scope="col">Ticker</th>
+          <th scope="col">Shares</th>
+          <th scope="col">Price you paid <span class="opt">(optional)</span></th>
+          <th scope="col">Date you bought <span class="opt">(optional)</span></th>
+          <th scope="col"><span class="sr-only">Remove</span></th>
+        </tr>
+      </thead>
+      <tbody id="holdings-body">
+        <tr class="holding-row">
+          <td><input type="text" name="ticker" placeholder="AAPL" aria-label="Ticker symbol"></td>
+          <td><input type="number" step="any" min="0" name="shares" placeholder="10" aria-label="Number of shares"></td>
+          <td><input type="number" step="any" min="0" name="purchase_price" placeholder="150.00" aria-label="Price you paid per share (optional)"></td>
+          <td><input type="date" name="purchase_date" aria-label="Date you bought it (optional)"></td>
+          <td><button type="button" class="remove-row" onclick="removeRow(this)" aria-label="Remove this holding">&times;</button></td>
+        </tr>
+      </tbody>
+    </table>
+    <button type="button" id="add-row">+ Add another holding</button>
+
+    <div class="csv-upload">
+      <label for="csv_file">Or upload a CSV instead <span class="opt">(optional -- adds to any rows above)</span></label>
+      <input type="file" id="csv_file" name="csv_file" accept=".csv,text/csv">
+      <p class="muted-note">Columns: <code>ticker, shares, purchase_price, purchase_date</code> (only ticker and shares are required; header row required).</p>
+    </div>
+
+    <button type="submit" id="analyze-btn">
+      <span class="btn-label">Analyze my portfolio</span>
+      <span class="btn-spinner" hidden><span class="spinner" aria-hidden="true"></span> Working&hellip;</span>
+    </button>
+  </form>
+
+  {% if result %}
+  <section class="results" aria-label="Analysis results">
+    <div class="results-header">
+      <h2>Overview</h2>
+      {% if result.risk_score is not none %}
+      <div class="risk-badge risk-{{ result.risk_label|lower|replace(' ', '-') }}" role="status">
+        <span class="risk-score-num">{{ "%.0f"|format(result.risk_score) }}</span>
+        <span class="risk-score-label">/100 &middot; {{ result.risk_label }} risk</span>
+      </div>
+      {% endif %}
+    </div>
+    {% for line in explanations.overview %}<p>{{ line }}</p>{% endfor %}
+    {% for line in explanations.risk_score %}<p class="muted-note">{{ line }}</p>{% endfor %}
+
+    {% if checklist %}
+      <ul class="checklist" aria-label="Portfolio health checklist">
+        {% for item in checklist %}
+          <li class="checklist-{{ item.status }}">
+            <span class="checklist-icon" aria-hidden="true">{{ '✅' if item.status == 'pass' else ('⚠️' if item.status == 'warn' else '—') }}</span>
+            <span class="checklist-label">{{ item.label }}</span>
+            <span class="checklist-detail">{{ item.detail }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    <table class="holdings-summary">
+      <caption class="sr-only">Breakdown of each holding</caption>
+      <thead>
+        <tr>
+          <th scope="col">Ticker</th><th scope="col">Sector</th><th scope="col">Value</th>
+          <th scope="col">% of portfolio</th><th scope="col">Gain/Loss</th><th scope="col">Max drawdown (history)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in result.rows %}
+        <tr>
+          <th scope="row">{{ r.ticker }}</th>
+          <td>{{ r.sector }}</td>
+          <td>${{ "%.2f"|format(r.value) }}</td>
+          <td>{{ "%.1f"|format(r.weight_pct) }}%</td>
+          <td class="{{ 'pos' if r.gain_loss_pct and r.gain_loss_pct >= 0 else 'neg' }}">
+            {% if r.gain_loss_pct is not none %}{{ "%.1f"|format(r.gain_loss_pct) }}%{% else %}&mdash;{% endif %}
+          </td>
+          <td class="neg">{% if r.max_drawdown_pct is not none %}{{ "%.1f"|format(r.max_drawdown_pct) }}%{% else %}&mdash;{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="chart-grid">
+      <div class="chart-card"><h3>Allocation</h3><canvas id="allocationChart" role="img" aria-label="Donut chart of portfolio allocation by holding"></canvas></div>
+      <div class="chart-card"><h3>Sector mix</h3><canvas id="sectorChart" role="img" aria-label="Bar chart of portfolio allocation by sector"></canvas></div>
+    </div>
+    <div class="chart-card wide"><h3>Relative performance (rebased to 100)</h3><canvas id="rebasedChart" role="img" aria-label="Line chart of each holding's price history, rebased to start at 100"></canvas></div>
+
+    {% if explanations.concentration %}
+      <h2>Concentration</h2>
+      {% for line in explanations.concentration %}<p>{{ line }}</p>{% endfor %}
+    {% endif %}
+
+    {% if explanations.volatility %}
+      <h2>Volatility &amp; risk-adjusted return</h2>
+      {% for line in explanations.volatility %}<p>{{ line }}</p>{% endfor %}
+    {% endif %}
+
+    {% if explanations.correlation or result.correlation_matrix %}
+      <h2>Hidden overlap</h2>
+      {% for line in explanations.correlation %}<p>{{ line }}</p>{% endfor %}
+      {% if result.correlation_matrix %}
+        <div id="correlationTable" role="table" aria-label="Correlation between holdings"></div>
+      {% endif %}
+    {% endif %}
+
+    {% if explanations.drawdown %}
+      <h2>What a real crash would have done to this</h2>
+      {% for line in explanations.drawdown %}<p>{{ line }}</p>{% endfor %}
+    {% endif %}
+
+    {% if explanations.benchmark %}
+      <h2>Vs. the S&amp;P 500</h2>
+      {% for line in explanations.benchmark %}<p>{{ line }}</p>{% endfor %}
+    {% endif %}
+
+    {% if explanations.behavioral %}
+      <h2>Your buying patterns</h2>
+      {% for line in explanations.behavioral %}<p>{{ line }}</p>{% endfor %}
+    {% endif %}
+
+    {% if explanations.tax %}
+      <h2>Tax basics on these</h2>
+      {% for line in explanations.tax %}<p>{{ line }}</p>{% endfor %}
+    {% endif %}
+
+    {% if explanations.reflect %}
+      <h2>Worth sitting with</h2>
+      {% for line in explanations.reflect %}<p class="reflect">{{ line }}</p>{% endfor %}
+    {% endif %}
+
+    {% if glossary %}
+      <details class="glossary">
+        <summary>Glossary of terms used above ({{ glossary|length }})</summary>
+        <dl>
+          {% for key, definition in glossary %}
+            <dt>{{ definition.split(':')[0] }}</dt>
+            <dd>{{ definition.split(':', 1)[1] }}</dd>
+          {% endfor %}
+        </dl>
+      </details>
+    {% endif %}
+
+    <div class="action-row no-print">
+      <button type="button" onclick="window.print()">Print / save as PDF</button>
+      <button type="button" id="copy-summary-btn">Copy one-line summary</button>
+      <button type="button" id="download-json-btn">Download raw data (JSON)</button>
+      <span id="copy-confirm" class="muted-note" hidden>Copied.</span>
+    </div>
+  </section>
+  {% endif %}
+
+  <template id="row-template">
+    <tr class="holding-row">
+      <td><input type="text" name="ticker" placeholder="AAPL" aria-label="Ticker symbol" required></td>
+      <td><input type="number" step="any" min="0" name="shares" placeholder="10" aria-label="Number of shares" required></td>
+      <td><input type="number" step="any" min="0" name="purchase_price" placeholder="150.00" aria-label="Price you paid per share (optional)"></td>
+      <td><input type="date" name="purchase_date" aria-label="Date you bought it (optional)"></td>
+      <td><button type="button" class="remove-row" onclick="removeRow(this)" aria-label="Remove this holding">&times;</button></td>
+    </tr>
+  </template>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    function addRow(values) {
+      const tmpl = document.getElementById('row-template');
+      const clone = tmpl.content.cloneNode(true);
+      if (values) {
+        const inputs = clone.querySelectorAll('input');
+        inputs[0].value = values.ticker || '';
+        inputs[1].value = values.shares || '';
+        inputs[2].value = values.purchase_price || '';
+        inputs[3].value = values.purchase_date || '';
+      }
+      document.getElementById('holdings-body').appendChild(clone);
+    }
+    document.getElementById('add-row').addEventListener('click', function () { addRow(); });
+    function removeRow(btn) {
+      const rows = document.querySelectorAll('.holding-row');
+      if (rows.length > 1) { btn.closest('tr').remove(); }
+    }
+    document.getElementById('holdings-form').addEventListener('submit', function () {
+      document.querySelector('#analyze-btn .btn-label').hidden = true;
+      document.querySelector('#analyze-btn .btn-spinner').hidden = false;
+      document.getElementById('analyze-btn').disabled = true;
+    });
+
+    const fillExampleBtn = document.getElementById('fill-example');
+    if (fillExampleBtn) {
+      fillExampleBtn.addEventListener('click', function () {
+        // clear the default empty row, then load a small sample portfolio
+        document.getElementById('holdings-body').innerHTML = '';
+        const example = [
+          {ticker: 'AAPL', shares: '10', purchase_price: '150', purchase_date: '2022-06-01'},
+          {ticker: 'MSFT', shares: '5', purchase_price: '250', purchase_date: '2021-03-15'},
+          {ticker: 'SPY', shares: '8', purchase_price: '380', purchase_date: '2023-01-10'},
+        ];
+        example.forEach(addRow);
+        document.getElementById('holdings-form').scrollIntoView({behavior: 'smooth'});
+      });
+    }
+
+    {% if chart_json %}
+    const CHART_DATA = {{ chart_json | safe }};
+    {% else %}
+    const CHART_DATA = null;
+    {% endif %}
+
+    {% if summary_text %}
+    const SUMMARY_TEXT = {{ summary_text | tojson }};
+    {% endif %}
+    {% if export_json %}
+    const EXPORT_JSON = {{ export_json | safe }};
+    {% endif %}
+
+    const copyBtn = document.getElementById('copy-summary-btn');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', function () {
+        navigator.clipboard.writeText(SUMMARY_TEXT).then(function () {
+          const confirm = document.getElementById('copy-confirm');
+          confirm.hidden = false;
+          setTimeout(function () { confirm.hidden = true; }, 2000);
+        });
+      });
+    }
+
+    const downloadBtn = document.getElementById('download-json-btn');
+    if (downloadBtn) {
+      downloadBtn.addEventListener('click', function () {
+        const blob = new Blob([JSON.stringify(EXPORT_JSON, null, 2)], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'portfolio-analysis.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      });
+    }
+  </script>
+  <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+{% endblock %}
