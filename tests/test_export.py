@@ -1,7 +1,7 @@
 import json
 
-from app.export import build_summary_text, build_export_json
 from app.checklist import build_checklist
+from app.export import build_export_json, build_summary_text
 
 
 def sample_result():

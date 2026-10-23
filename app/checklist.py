@@ -5,17 +5,20 @@ No new metrics are computed here; this is purely a presentation layer over
 compute.py's output, kept separate because "how do we summarize this as a
 checklist" is a different concern from "how do we calculate it."
 """
+from __future__ import annotations
+
 from . import config
 
 
-def build_checklist(result):
+def build_checklist(result: dict) -> list[dict]:
+    """Pass / warn / n-a items built only from numbers compute.py produced."""
     items = []
 
     c = result["concentration"]
     items.append({
-        "label": f"No single holding over {config.CONCENTRATION_FLAG_PCT:.0f}% of the portfolio",
+        "label": f"No single holding over {config.CONCENTRATION_FLAG_PCT:.0f}% of the portfolio (diversified funds excluded)",
         "status": "warn" if c["flagged"] else "pass",
-        "detail": f"{c['top_ticker']} is {c['top_pct']:.0f}%" if c["top_ticker"] else "n/a",
+        "detail": f"{c['top_ticker']} is {c['top_pct']:.0f}%" if c["top_ticker"] else "all diversified funds",
     })
 
     items.append({
@@ -45,6 +48,14 @@ def build_checklist(result):
         "status": "warn" if result["behavioral_flags"] else "pass",
         "detail": f"{len(result['behavioral_flags'])} flagged" if result["behavioral_flags"] else "n/a",
     })
+
+    if result.get("weighted_expense_ratio_pct") is not None:
+        er = result["weighted_expense_ratio_pct"]
+        items.append({
+            "label": f"Fund fees at or below {config.HIGH_EXPENSE_RATIO_PCT:.2f}% a year (value-weighted)",
+            "status": "warn" if er > config.HIGH_EXPENSE_RATIO_PCT else "pass",
+            "detail": f"{er:.2f}%",
+        })
 
     if result.get("risk_score") is not None:
         items.append({

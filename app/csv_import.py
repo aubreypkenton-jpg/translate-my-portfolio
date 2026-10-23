@@ -7,8 +7,11 @@ input methods.
 Expected columns (header row, case-insensitive, any order):
   ticker, shares, purchase_price (optional), purchase_date (optional)
 """
+from __future__ import annotations
+
 import csv
 import io
+from typing import IO
 
 REQUIRED_COLUMNS = {"ticker", "shares"}
 OPTIONAL_COLUMNS = {"purchase_price", "purchase_date"}
@@ -30,12 +33,13 @@ COLUMN_ALIASES = {
 }
 
 
-def _normalize_header(raw):
+def _normalize_header(raw: str) -> str:
+    """Lowercase, underscores for spaces, then map known aliases."""
     key = raw.strip().lower().replace(" ", "_")
     return COLUMN_ALIASES.get(key, key)
 
 
-def parse_csv(file_stream, max_rows=200):
+def parse_csv(file_stream: IO, max_rows: int = 200) -> tuple[list[dict], list[str]]:
     """
     file_stream: a file-like object opened in binary or text mode (Flask
     gives us a werkzeug FileStorage stream).

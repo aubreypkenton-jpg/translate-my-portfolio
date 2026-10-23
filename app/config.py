@@ -9,6 +9,10 @@ to justify in DECISIONS.md.
 HISTORY_PERIOD = "5y"          # yfinance period string; covers COVID + 2022 crash windows
 BENCHMARK_TICKER = "SPY"       # S&P 500 ETF, used for "vs. the market" comparisons
 CACHE_TTL_SECONDS = 15 * 60    # how long fetched price data is reused before re-fetching
+FAILED_TICKER_TTL_SECONDS = 5 * 60  # remember "Yahoo has no data for X" this long
+FETCH_ATTEMPTS = 3             # tries per ticker before giving up
+FETCH_BACKOFF_SECONDS = 0.75   # wait before retry; doubles each time (0.75s, 1.5s)
+FETCH_MAX_WORKERS = 4          # parallel Yahoo requests; kept low to avoid rate limits
 
 # -- known historical drawdown windows, measured against REAL held-ticker prices --
 CRASH_WINDOWS = {
@@ -44,7 +48,15 @@ CONCENTRATED_RECENT_BUY_DAYS = 30    # ...within this many days...
 
 # -- risk score model (see DECISIONS.md: simple equal-weighted heuristic, not a
 #    calibrated quant model) --
-RISK_FREE_RATE = 0.04                # annual, used for Sharpe ratio; update periodically
+RISK_FREE_RATE = 0.04                # default annual risk-free rate for Sharpe/Sortino; users can override
+RISK_FREE_RATE_MAX = 0.20            # input sanity cap (20%)
+
+# -- fund (ETF / mutual fund) flags --
+HIGH_EXPENSE_RATIO_PCT = 0.50        # funds charging more than 0.50%/yr get flagged
+HIGH_DIVIDEND_YIELD_PCT = 6.0        # yields above this are worth a second look
+
+# -- rebalance tool --
+REBALANCE_SUM_TOLERANCE_PCT = 0.5    # target weights must sum to 100% +/- this
 RISK_SCORE_CAPS = {
     "concentration": 50.0,   # top holding % that maps to a max sub-score of 100
     "sector": 70.0,          # top sector % that maps to a max sub-score of 100

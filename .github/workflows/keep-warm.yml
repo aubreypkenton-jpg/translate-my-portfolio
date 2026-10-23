@@ -1,0 +1,21 @@
+# Render's free tier sleeps after 15 minutes without traffic and takes about a
+# minute to wake up. This pings /health every 10 minutes during US business
+# hours (weekdays, ~8am-7pm Eastern) so a recruiter clicking the link gets an
+# instant page. That's ~55 hours/week, well inside Render's 750 free hours/month.
+#
+# Setup: GitHub repo > Settings > Secrets and variables > Actions > Variables
+# > New repository variable: APP_URL = https://your-app.onrender.com
+name: Keep warm
+
+on:
+  schedule:
+    - cron: "*/10 12-23 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    if: ${{ vars.APP_URL != '' }}
+    steps:
+      - name: Ping /health
+        run: curl --silent --show-error --fail --max-time 90 --retry 2 "${{ vars.APP_URL }}/health"

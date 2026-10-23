@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.compute import compute_portfolio, compute_benchmark_stats
+from app.compute import compute_benchmark_stats, compute_portfolio
 from app.normalize import merge_duplicate_tickers
 from app.validation import validate_holdings
 
