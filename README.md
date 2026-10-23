@@ -1,7 +1,7 @@
 # Translate My Portfolio
 
 [![CI](https://github.com/aubreypkenton-jpg/translate-my-portfolio/actions/workflows/test.yml/badge.svg)](https://github.com/aubreypkenton-jpg/translate-my-portfolio/actions/workflows/test.yml)
-![Tests](https://img.shields.io/badge/tests-209%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-216%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
@@ -37,7 +37,7 @@ No login, nothing stored, no brokerage connection, and no incentive to get anyon
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
 python run.py                                       # http://localhost:8080
-pytest                                              # 209 tests, coverage gate 85%
+pytest                                              # 216 tests, coverage gate 85%
 ruff check .                                        # lint
 ```
 

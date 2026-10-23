@@ -52,6 +52,9 @@ ASSET_CLASS_LABELS = {
 }
 
 
+MAX_PLAUSIBLE_YIELD_PCT = 25.0  # anything higher is almost certainly a unit error
+
+
 class DataProviderError(Exception):
     """Raised when market data can't be fetched because of the provider
     (rate limit, outage, no network), not because of the user's input."""
@@ -105,7 +108,34 @@ def _safe_float(value: Any) -> float | None:
     return f if f == f else None  # filters NaN
 
 
-def _resolve_profile(tk: Any, ticker: str) -> dict[str, Any]:
+def _dividend_yield_pct(info: dict[str, Any], price: float | None) -> float | None:
+    """Dividend yield in percent, robust to Yahoo's inconsistent units.
+
+    Yahoo reports ``dividendYield`` already in percent (0.41 = 0.41%) but
+    ``yield`` and ``trailingAnnualDividendYield`` as fractions (0.0125 =
+    1.25%), and these conventions have changed over time. So the most
+    reliable source is computed from dollars: annual dividend / price.
+    Any result above MAX_PLAUSIBLE_YIELD_PCT is treated as a unit error and
+    dropped rather than shown.
+    """
+    candidates: list[float] = []
+    rate = _safe_float(info.get("dividendRate")) or _safe_float(info.get("trailingAnnualDividendRate"))
+    if rate is not None and price:
+        candidates.append(rate / price * 100.0)
+    for key in ("yield", "trailingAnnualDividendYield"):  # fractions
+        v = _safe_float(info.get(key))
+        if v is not None:
+            candidates.append(v * 100.0)
+    v = _safe_float(info.get("dividendYield"))  # already a percent
+    if v is not None:
+        candidates.append(v)
+    for c in candidates:
+        if 0 <= c <= MAX_PLAUSIBLE_YIELD_PCT:
+            return c
+    return None
+
+
+def _resolve_profile(tk: Any, ticker: str, price: float | None = None) -> dict[str, Any]:
     """Sector, asset class, and fund facts (dividend yield, expense ratio).
 
     Funds usually have no 'sector' in Yahoo's data; without the fallback
@@ -125,13 +155,7 @@ def _resolve_profile(tk: Any, ticker: str) -> dict[str, Any]:
     quote_type = (info.get("quoteType") or "").upper()
     sector = info.get("sector") or FUND_SECTOR_LABELS.get(quote_type, "Unknown")
 
-    dividend_yield = None
-    for key in ("dividendYield", "yield", "trailingAnnualDividendYield"):
-        v = _safe_float(info.get(key))
-        if v is not None:
-            # Values <= 1 are fractions (0.013 = 1.3%); larger are already %.
-            dividend_yield = v * 100.0 if v <= 1 else v
-            break
+    dividend_yield = _dividend_yield_pct(info, price)
 
     expense_ratio = None
     for key in ("netExpenseRatio", "annualReportExpenseRatio", "expenseRatio"):
@@ -169,7 +193,7 @@ def _fetch_one(ticker: str) -> dict[str, Any] | None:
     closes = hist["Close"].copy()
     closes.index = pd.to_datetime(closes.index).strftime("%Y-%m-%d")
 
-    profile = _resolve_profile(tk, ticker)
+    profile = _resolve_profile(tk, ticker, float(closes.iloc[-1]))
     result = {"price_history": closes, "current_price": float(closes.iloc[-1]), **profile}
     _price_cache.set(ticker, result)
     return result
