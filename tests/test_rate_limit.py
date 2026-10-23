@@ -4,13 +4,13 @@ the suite which disables it (see test_routes.py) so ~10 other tests hitting
 /analyze don't trip each other's limit. This is the one place that actually
 proves the "20 per minute" cap on /analyze does something.
 """
-import pandas as pd
 import numpy as np
+import pandas as pd
 import pytest
 
+import app.routes as routes_module
 from app import create_app
 from app.extensions import limiter
-import app.routes as routes_module
 
 
 def make_history(start=100, seed=1, n=300):

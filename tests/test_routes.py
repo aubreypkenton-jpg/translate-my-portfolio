@@ -9,8 +9,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app import create_app
 import app.routes as routes_module
+from app import create_app
 
 
 def make_history(start=100, seed=1, n=1300):

@@ -1,0 +1,20 @@
+[project]
+name = "translate-my-portfolio"
+version = "2.0.0"
+description = "Plain-English portfolio risk report from real price data. Template-based, no LLM."
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+extend-exclude = [".venv"]
+
+[tool.ruff.lint]
+# E/W: style errors, F: real bugs (unused names, undefined vars), I: import
+# order, B: common bug patterns, UP: modern syntax, SIM: simplifications
+select = ["E", "W", "F", "I", "B", "UP", "SIM"]
+ignore = ["E501"]  # long template sentences in explain.py read better unwrapped
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402"]

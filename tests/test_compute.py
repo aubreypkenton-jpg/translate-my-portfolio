@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.compute import compute_portfolio, _max_drawdown_pct, _cagr
+from app.compute import _cagr, _max_drawdown_pct, compute_portfolio
 
 
 def make_dates(start="2019-06-01", end="2024-06-01"):

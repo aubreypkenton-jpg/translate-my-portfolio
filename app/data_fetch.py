@@ -68,7 +68,7 @@ def _is_provider_error(exc: BaseException) -> bool:
     rate_limit_cls = getattr(getattr(yf, "exceptions", None), "YFRateLimitError", None)
     if rate_limit_cls is not None and isinstance(exc, rate_limit_cls):
         return True
-    if isinstance(exc, (ConnectionError, TimeoutError)):
+    if isinstance(exc, ConnectionError | TimeoutError):
         return True
     name = type(exc).__name__.lower()
     return any(word in name for word in ("ratelimit", "connection", "timeout", "proxy"))
@@ -234,12 +234,11 @@ def fetch_holdings_data(
         sectors[sym] = data["sector"]
         price_histories[sym] = data["price_history"]
 
-    if symbols and not current_prices:
-        if provider_errors > 0 or not _provider_is_healthy():
-            # Don't let an outage get remembered as "these tickers don't exist".
-            for sym in symbols:
-                _failure_cache.delete(sym)
-            raise DataProviderError("Market data provider unavailable")
+    if symbols and not current_prices and (provider_errors > 0 or not _provider_is_healthy()):
+        # Don't let an outage get remembered as "these tickers don't exist".
+        for sym in symbols:
+            _failure_cache.delete(sym)
+        raise DataProviderError("Market data provider unavailable")
 
     return current_prices, sectors, price_histories, failed
 

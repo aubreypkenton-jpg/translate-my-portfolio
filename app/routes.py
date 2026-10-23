@@ -59,7 +59,7 @@ def analyze():
 
     raw_holdings = [
         {"ticker": t, "shares": s, "purchase_price": p, "purchase_date": d}
-        for t, s, p, d in zip(tickers, shares, purchase_prices, purchase_dates)
+        for t, s, p, d in zip(tickers, shares, purchase_prices, purchase_dates, strict=False)
     ]
 
     errors = []

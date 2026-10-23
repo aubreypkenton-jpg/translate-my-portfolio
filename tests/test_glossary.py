@@ -1,4 +1,4 @@
-from app.glossary import relevant_glossary, GLOSSARY
+from app.glossary import GLOSSARY, relevant_glossary
 
 
 def test_empty_explanations_yield_empty_glossary():
@@ -36,6 +36,6 @@ def test_no_duplicate_terms_across_sections():
 
 
 def test_every_glossary_entry_is_well_formed():
-    for key, definition in GLOSSARY.items():
+    for _key, definition in GLOSSARY.items():
         assert ":" in definition
         assert len(definition) > 20
