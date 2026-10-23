@@ -2,13 +2,13 @@ import json
 import logging
 from datetime import datetime
 
-from flask import Blueprint, render_template, request
+from flask import Blueprint, jsonify, render_template, request
 
 from .chart_data import build_chart_data
 from .checklist import build_checklist
 from .compute import compute_portfolio
 from .csv_import import parse_csv
-from .data_fetch import fetch_holdings_data, fetch_benchmark
+from .data_fetch import DataProviderError, fetch_benchmark, fetch_holdings_data
 from .explain import build_explanations
 from .export import build_export_json, build_summary_text
 from .extensions import limiter
@@ -24,9 +24,24 @@ DEFAULT_CONTEXT = dict(result=None, explanations=None, errors=[], notes=[], fail
                         export_json=None)
 
 
+PROVIDER_DOWN_MESSAGE = (
+    "Our free market-data source (Yahoo Finance) isn't responding right now, "
+    "usually because it's limiting how many requests it accepts. This isn't a "
+    "problem with your tickers. Please wait a minute and try again."
+)
+
+
 @bp.route("/", methods=["GET"])
 def index():
     return render_template("index.html", **DEFAULT_CONTEXT)
+
+
+@bp.route("/health")
+def health():
+    """Liveness check for the host (Render/Railway/Replit). Deliberately does
+    NOT call Yahoo: the app is "up" even if the data provider is having a bad
+    minute, and a health check shouldn't burn rate-limit budget."""
+    return jsonify(status="ok"), 200
 
 
 @bp.route("/about")
@@ -69,7 +84,11 @@ def analyze():
     unique_tickers = sorted({h["ticker"].upper() for h in merged_holdings})
     logger.info("Analyzing %d holding(s): %s", len(merged_holdings), unique_tickers)
 
-    current_prices, sectors, price_histories, failed = fetch_holdings_data(unique_tickers)
+    try:
+        current_prices, sectors, price_histories, failed = fetch_holdings_data(unique_tickers)
+    except DataProviderError:
+        logger.warning("Data provider unavailable for %s", unique_tickers)
+        return render_template("index.html", **{**DEFAULT_CONTEXT, "errors": [PROVIDER_DOWN_MESSAGE]}), 503
     benchmark_series = fetch_benchmark()
 
     usable_holdings = [h for h in merged_holdings if h["ticker"].upper() in current_prices]

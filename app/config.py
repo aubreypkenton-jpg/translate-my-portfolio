@@ -9,6 +9,10 @@ to justify in DECISIONS.md.
 HISTORY_PERIOD = "5y"          # yfinance period string; covers COVID + 2022 crash windows
 BENCHMARK_TICKER = "SPY"       # S&P 500 ETF, used for "vs. the market" comparisons
 CACHE_TTL_SECONDS = 15 * 60    # how long fetched price data is reused before re-fetching
+FAILED_TICKER_TTL_SECONDS = 5 * 60  # remember "Yahoo has no data for X" this long
+FETCH_ATTEMPTS = 3             # tries per ticker before giving up
+FETCH_BACKOFF_SECONDS = 0.75   # wait before retry; doubles each time (0.75s, 1.5s)
+FETCH_MAX_WORKERS = 4          # parallel Yahoo requests; kept low to avoid rate limits
 
 # -- known historical drawdown windows, measured against REAL held-ticker prices --
 CRASH_WINDOWS = {

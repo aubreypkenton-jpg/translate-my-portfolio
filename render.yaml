@@ -1,0 +1,8 @@
+# Render Blueprint: Render reads this when you click "New > Blueprint".
+services:
+  - type: web
+    name: translate-my-portfolio
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true

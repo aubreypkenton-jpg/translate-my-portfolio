@@ -7,3 +7,8 @@ tests/
 *.md
 htmlcov/
 .coverage
+.venv/
+.ruff_cache/
+render.yaml
+railway.json
+.replit

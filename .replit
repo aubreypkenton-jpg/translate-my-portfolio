@@ -1,0 +1,19 @@
+# Replit config. "Run" starts the dev server; "Deploy" uses gunicorn.
+modules = ["python-3.12"]
+run = "python run.py"
+entrypoint = "run.py"
+
+[nix]
+channel = "stable-24_05"
+
+[env]
+PORT = "8080"
+
+[[ports]]
+localPort = 8080
+externalPort = 80
+
+[deployment]
+deploymentTarget = "autoscale"
+build = ["sh", "-c", "pip install -r requirements.txt"]
+run = ["sh", "-c", "gunicorn -c gunicorn.conf.py run:app"]
