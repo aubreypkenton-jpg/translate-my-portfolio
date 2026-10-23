@@ -26,6 +26,9 @@ def create_app(rate_limit_enabled: bool = True) -> Flask:
 
     limiter.init_app(app)
 
+    from .formatting import FILTERS
+    app.jinja_env.filters.update(FILTERS)
+
     from .routes import bp
     app.register_blueprint(bp)
 

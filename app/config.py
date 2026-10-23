@@ -48,7 +48,15 @@ CONCENTRATED_RECENT_BUY_DAYS = 30    # ...within this many days...
 
 # -- risk score model (see DECISIONS.md: simple equal-weighted heuristic, not a
 #    calibrated quant model) --
-RISK_FREE_RATE = 0.04                # annual, used for Sharpe ratio; update periodically
+RISK_FREE_RATE = 0.04                # default annual risk-free rate for Sharpe/Sortino; users can override
+RISK_FREE_RATE_MAX = 0.20            # input sanity cap (20%)
+
+# -- fund (ETF / mutual fund) flags --
+HIGH_EXPENSE_RATIO_PCT = 0.50        # funds charging more than 0.50%/yr get flagged
+HIGH_DIVIDEND_YIELD_PCT = 6.0        # yields above this are worth a second look
+
+# -- rebalance tool --
+REBALANCE_SUM_TOLERANCE_PCT = 0.5    # target weights must sum to 100% +/- this
 RISK_SCORE_CAPS = {
     "concentration": 50.0,   # top holding % that maps to a max sub-score of 100
     "sector": 70.0,          # top sector % that maps to a max sub-score of 100

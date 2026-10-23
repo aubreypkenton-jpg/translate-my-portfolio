@@ -1,28 +1,33 @@
-import json
+"""Flask web layer: reads the form, calls the pure modules, renders pages.
+
+The flow for one analysis is always the same, and each step lives in its own
+module: validate -> merge duplicates -> fetch (the only network step) ->
+compute -> explain -> render.
+"""
+from __future__ import annotations
+
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Any
 
 from flask import Blueprint, jsonify, render_template, request
 
+from . import config
 from .chart_data import build_chart_data
 from .checklist import build_checklist
-from .compute import compute_portfolio
+from .compute import compute_portfolio, compute_rebalance
 from .csv_import import parse_csv
-from .data_fetch import DataProviderError, fetch_benchmark, fetch_holdings_data
+from .data_fetch import DataProviderError, fetch_benchmark, fetch_holdings_data, get_cached_profiles
+from .examples import EXAMPLE_PORTFOLIOS
 from .explain import build_explanations
 from .export import build_export_json, build_summary_text
 from .extensions import limiter
 from .glossary import relevant_glossary
 from .normalize import merge_duplicate_tickers
-from .validation import validate_holdings
+from .validation import parse_risk_free_rate, validate_holdings, validate_targets
 
 logger = logging.getLogger(__name__)
 bp = Blueprint("main", __name__)
-
-DEFAULT_CONTEXT = dict(result=None, explanations=None, errors=[], notes=[], failed=[],
-                        chart_json=None, glossary=[], checklist=[], summary_text=None,
-                        export_json=None)
-
 
 PROVIDER_DOWN_MESSAGE = (
     "Our free market-data source (Yahoo Finance) isn't responding right now, "
@@ -31,9 +36,21 @@ PROVIDER_DOWN_MESSAGE = (
 )
 
 
+def _context(**overrides: Any) -> dict[str, Any]:
+    """Every template variable with a safe default, so templates never crash."""
+    ctx: dict[str, Any] = dict(
+        result=None, explanations=None, errors=[], notes=[], failed=[],
+        chart_data=None, glossary=[], checklist=[], summary_text=None, export_data=None,
+        holdings=[], risk_free_pct=config.RISK_FREE_RATE * 100.0, rebalance=None,
+        rebalance_errors=[], targets={}, examples=EXAMPLE_PORTFOLIOS,
+    )
+    ctx.update(overrides)
+    return ctx
+
+
 @bp.route("/", methods=["GET"])
 def index():
-    return render_template("index.html", **DEFAULT_CONTEXT)
+    return render_template("index.html", **_context())
 
 
 @bp.route("/health")
@@ -45,31 +62,34 @@ def health():
 
 
 @bp.route("/about")
+@bp.route("/methodology")
 def about():
-    return render_template("about.html")
+    return render_template("about.html", config=config)
 
 
 @bp.route("/analyze", methods=["POST"])
 @limiter.limit("20 per minute")
 def analyze():
-    tickers = request.form.getlist("ticker")
-    shares = request.form.getlist("shares")
-    purchase_prices = request.form.getlist("purchase_price")
-    purchase_dates = request.form.getlist("purchase_date")
-
+    form = request.form
     raw_holdings = [
         {"ticker": t, "shares": s, "purchase_price": p, "purchase_date": d}
-        for t, s, p, d in zip(tickers, shares, purchase_prices, purchase_dates, strict=False)
+        for t, s, p, d in zip(form.getlist("ticker"), form.getlist("shares"),
+                              form.getlist("purchase_price"), form.getlist("purchase_date"), strict=False)
     ]
 
-    errors = []
+    errors: list[str] = []
     csv_file = request.files.get("csv_file")
     if csv_file and csv_file.filename:
         csv_holdings, csv_errors = parse_csv(csv_file.stream)
         raw_holdings.extend(csv_holdings)
         errors.extend(csv_errors)
         if csv_holdings:
-            logger.info("Parsed %d holding(s) from uploaded CSV '%s'", len(csv_holdings), csv_file.filename)
+            logger.info("Parsed %d holding(s) from uploaded CSV", len(csv_holdings))
+
+    rf, rf_error = parse_risk_free_rate(form.get("risk_free_rate"), config.RISK_FREE_RATE,
+                                        config.RISK_FREE_RATE_MAX)
+    if rf_error:
+        errors.append(rf_error)
 
     clean_holdings, row_errors = validate_holdings(raw_holdings)
     errors.extend(msg for _, msg in row_errors)
@@ -77,10 +97,10 @@ def analyze():
     if not clean_holdings:
         if not errors:
             errors = ["Add at least one holding (ticker + shares)."]
-        return render_template("index.html", **{**DEFAULT_CONTEXT, "errors": errors})
+        return render_template("index.html", **_context(errors=errors, holdings=raw_holdings,
+                                                        risk_free_pct=rf * 100))
 
     merged_holdings, notes = merge_duplicate_tickers(clean_holdings)
-
     unique_tickers = sorted({h["ticker"].upper() for h in merged_holdings})
     logger.info("Analyzing %d holding(s): %s", len(merged_holdings), unique_tickers)
 
@@ -88,31 +108,62 @@ def analyze():
         current_prices, sectors, price_histories, failed = fetch_holdings_data(unique_tickers)
     except DataProviderError:
         logger.warning("Data provider unavailable for %s", unique_tickers)
-        return render_template("index.html", **{**DEFAULT_CONTEXT, "errors": [PROVIDER_DOWN_MESSAGE]}), 503
+        return render_template("index.html", **_context(errors=[PROVIDER_DOWN_MESSAGE],
+                                                        holdings=merged_holdings,
+                                                        risk_free_pct=rf * 100)), 503
     benchmark_series = fetch_benchmark()
+    profiles = get_cached_profiles(unique_tickers)
 
     usable_holdings = [h for h in merged_holdings if h["ticker"].upper() in current_prices]
-
     if not usable_holdings:
-        errors.append("Couldn't fetch data for any of those tickers. Double-check the symbols.")
-        return render_template("index.html", **{**DEFAULT_CONTEXT, "errors": errors, "failed": failed})
+        return render_template("index.html", **_context(
+            errors=errors, failed=failed, holdings=merged_holdings, risk_free_pct=rf * 100))
 
+    today = datetime.now(timezone.utc)
     result = compute_portfolio(usable_holdings, current_prices, sectors, price_histories,
-                                today=datetime.utcnow(), benchmark_series=benchmark_series)
+                               today=today, benchmark_series=benchmark_series,
+                               risk_free_rate=rf, profiles=profiles)
+
+    # optional "what if I rebalance?" comparison, submitted from the results page
+    rebalance = None
+    rebalance_errors: list[str] = []
+    targets: dict[str, float] = {}
+    if form.get("rebalance") == "1":
+        parsed, rebalance_errors = validate_targets(form.getlist("target_ticker"),
+                                                    form.getlist("target_pct"),
+                                                    config.REBALANCE_SUM_TOLERANCE_PCT)
+        unknown = [t for t in (parsed or {}) if t not in current_prices]
+        if unknown:
+            rebalance_errors.append(f"Target weights include tickers not in this portfolio: {', '.join(unknown)}.")
+        elif parsed:
+            targets = parsed
+            rebalance = compute_rebalance(result, targets, current_prices, sectors, price_histories,
+                                          today=today, benchmark_series=benchmark_series,
+                                          risk_free_rate=rf, profiles=profiles)
+        if not targets:
+            targets = {t: _safe_float(p) for t, p in zip(form.getlist("target_ticker"),
+                                                        form.getlist("target_pct"), strict=False)}
+
     explanations = build_explanations(result)
-    chart_data = build_chart_data(result, price_histories)
-    glossary = relevant_glossary(explanations)
     checklist = build_checklist(result)
-    summary_text = build_summary_text(result)
-    export_json = build_export_json(result, checklist)
 
     return render_template(
         "index.html",
-        result=result, explanations=explanations,
-        errors=errors, notes=notes, failed=failed,
-        chart_json=json.dumps(chart_data),
-        glossary=glossary,
-        checklist=checklist,
-        summary_text=summary_text,
-        export_json=json.dumps(export_json),
+        **_context(
+            result=result, explanations=explanations, errors=errors, notes=notes, failed=failed,
+            chart_data=build_chart_data(result, price_histories),
+            glossary=relevant_glossary(explanations),
+            checklist=checklist,
+            summary_text=build_summary_text(result),
+            export_data=build_export_json(result, checklist),
+            holdings=usable_holdings, risk_free_pct=rf * 100,
+            rebalance=rebalance, rebalance_errors=rebalance_errors, targets=targets,
+        ),
     )
+
+
+def _safe_float(raw: str | None) -> float | None:
+    try:
+        return float(raw) if raw not in (None, "") else None
+    except ValueError:
+        return None

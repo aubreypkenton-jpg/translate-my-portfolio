@@ -1,83 +1,138 @@
+// Charts (Chart.js). Colors come from CSS custom properties so light/dark mode
+// and print stay consistent. Palette: colorblind-validated blue/orange pair;
+// SPY is also dashed so identity never relies on color alone.
 (function () {
-  if (typeof CHART_DATA === 'undefined' || !CHART_DATA) return;
+  'use strict';
+  const D = window.CHART_DATA;
+  if (!D || typeof Chart === 'undefined') return;
 
-  const palette = ['#4f8cff', '#3ecf8e', '#e8c547', '#ff9a4f', '#ff6b6b', '#a97fff', '#4fd1c5', '#f472b6'];
-  const gridColor = '#2a2f3a';
-  const textColor = '#9aa3b2';
+  const css = getComputedStyle(document.documentElement);
+  const v = function (name) { return css.getPropertyValue(name).trim(); };
+  const C = {
+    s1: v('--series-1'), s2: v('--series-2'), ink: v('--ink-2'), muted: v('--muted'),
+    grid: v('--line'), axis: v('--line-strong'), surface: v('--surface'),
+  };
 
-  Chart.defaults.color = textColor;
-  Chart.defaults.borderColor = gridColor;
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+  Chart.defaults.color = C.ink;
+  Chart.defaults.borderColor = C.grid;
+  Chart.defaults.maintainAspectRatio = false;
+  Chart.defaults.animation = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? false : { duration: 400 };
 
-  const allocEl = document.getElementById('allocationChart');
-  if (allocEl && CHART_DATA.allocation && CHART_DATA.allocation.labels.length) {
-    new Chart(allocEl, {
-      type: 'doughnut',
-      data: {
-        labels: CHART_DATA.allocation.labels,
-        datasets: [{ data: CHART_DATA.allocation.values, backgroundColor: palette }],
+  const money = function (x) { return '$' + Math.round(x).toLocaleString(); };
+  const pct = function (x, d) { return x.toFixed(d === undefined ? 1 : d) + '%'; };
+
+  function xTicks(dates) {
+    // show ~6 date labels as "Mon YYYY"
+    const step = Math.max(1, Math.floor(dates.length / 6));
+    return {
+      autoSkip: false, maxRotation: 0,
+      callback: function (val, idx) {
+        if (idx % step !== 0) return '';
+        const d = new Date(dates[idx] + 'T00:00:00');
+        return d.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
       },
-      options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } } },
-    });
+    };
   }
 
-  const sectorEl = document.getElementById('sectorChart');
-  if (sectorEl && CHART_DATA.sectors && CHART_DATA.sectors.labels.length) {
-    new Chart(sectorEl, {
-      type: 'bar',
-      data: {
-        labels: CHART_DATA.sectors.labels,
-        datasets: [{ label: '% of portfolio', data: CHART_DATA.sectors.values, backgroundColor: palette }],
-      },
-      options: {
-        plugins: { legend: { display: false } },
-        scales: { y: { beginAtZero: true, grid: { color: gridColor } }, x: { grid: { display: false } } },
-      },
-    });
+  function lineDatasets(block, fmtLabel) {
+    const sets = [{
+      label: 'Your portfolio', data: block.portfolio, borderColor: C.s1, backgroundColor: C.s1,
+      borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: 0,
+    }];
+    if (block.benchmark && block.benchmark.length) {
+      sets.push({
+        label: 'S&P 500 (SPY)', data: block.benchmark, borderColor: C.s2, backgroundColor: C.s2,
+        borderWidth: 2, borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 4, tension: 0, spanGaps: true,
+      });
+    }
+    return sets;
   }
 
-  const rebasedEl = document.getElementById('rebasedChart');
-  const rebased = CHART_DATA.rebased;
-  if (rebasedEl && rebased && rebased.dates && rebased.dates.length) {
-    const datasets = Object.keys(rebased.series).map((ticker, i) => ({
-      label: ticker,
-      data: rebased.series[ticker],
-      borderColor: palette[i % palette.length],
-      backgroundColor: 'transparent',
-      pointRadius: 0,
-      borderWidth: 2,
-      tension: 0.1,
-    }));
-    // Thin the x-axis labels so it isn't unreadable with 500 points
-    const step = Math.max(1, Math.floor(rebased.dates.length / 8));
-    new Chart(rebasedEl, {
+  function lineChart(id, block, yFmt, extraY) {
+    const el = document.getElementById(id);
+    if (!el || !block || !block.dates || !block.dates.length) return;
+    new Chart(el, {
       type: 'line',
-      data: { labels: rebased.dates, datasets: datasets },
+      data: { labels: block.dates, datasets: lineDatasets(block) },
       options: {
         interaction: { mode: 'index', intersect: false },
-        plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } },
+        plugins: {
+          legend: { position: 'top', align: 'start', labels: { usePointStyle: true, pointStyle: 'line', boxWidth: 24 } },
+          tooltip: {
+            callbacks: {
+              title: function (items) { return items[0].label; },
+              label: function (ctx) { return ctx.dataset.label + ': ' + yFmt(ctx.parsed.y); },
+            },
+          },
+        },
         scales: {
-          y: { grid: { color: gridColor }, title: { display: true, text: 'Rebased to 100' } },
-          x: { grid: { display: false }, ticks: { callback: function (val, idx) { return idx % step === 0 ? this.getLabelForValue(val) : ''; } } },
+          x: { grid: { display: false }, border: { color: C.axis }, ticks: xTicks(block.dates) },
+          y: Object.assign({ grid: { color: C.grid }, border: { display: false }, ticks: { callback: yFmt } }, extraY || {}),
         },
       },
     });
   }
 
+  lineChart('growthChart', D.growth, money);
+  lineChart('drawdownChart', D.drawdown, function (x) { return pct(x, 0); }, { max: 0 });
+
+  function barChart(id, block, tooltipExtra) {
+    const el = document.getElementById(id);
+    if (!el || !block || !block.labels || !block.labels.length) return;
+    // more categories -> taller box so labels never collide
+    el.parentElement.style.height = Math.max(160, 36 * block.labels.length + 40) + 'px';
+    new Chart(el, {
+      type: 'bar',
+      data: {
+        labels: block.labels,
+        datasets: [{ label: '% of portfolio', data: block.values, backgroundColor: C.s1,
+          borderRadius: 4, borderSkipped: 'start', maxBarThickness: 22 }],
+      },
+      options: {
+        indexAxis: 'y',
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: function (ctx) {
+            return pct(ctx.parsed.x) + (tooltipExtra ? tooltipExtra(ctx.dataIndex) : '');
+          } } },
+        },
+        scales: {
+          x: { beginAtZero: true, grid: { color: C.grid }, border: { display: false }, ticks: { callback: function (x) { return x + '%'; } } },
+          y: { grid: { display: false }, border: { color: C.axis } },
+        },
+      },
+    });
+  }
+
+  barChart('allocationChart', D.allocation, function (i) {
+    return D.allocation.dollars ? ' (' + money(D.allocation.dollars[i]) + ')' : '';
+  });
+  barChart('sectorChart', D.sectors);
+  barChart('assetClassChart', D.asset_classes);
+
+  // ---- correlation heatmap as an accessible HTML table ----
   const corrDiv = document.getElementById('correlationTable');
-  if (corrDiv && CHART_DATA.correlation) {
-    const tickers = Object.keys(CHART_DATA.correlation);
-    let html = '<table><thead><tr><th></th>' + tickers.map(t => `<th>${t}</th>`).join('') + '</tr></thead><tbody>';
-    tickers.forEach(rowT => {
-      html += `<tr><th>${rowT}</th>`;
-      tickers.forEach(colT => {
-        const v = CHART_DATA.correlation[rowT][colT];
-        const alpha = Math.min(1, Math.abs(v));
-        const color = v >= 0 ? `rgba(255,107,107,${alpha * 0.6})` : `rgba(79,140,255,${alpha * 0.6})`;
-        html += `<td style="background:${color}">${v.toFixed(2)}</td>`;
+  if (corrDiv && D.correlation) {
+    const tickers = Object.keys(D.correlation);
+    // diverging: blue (-1) -> neutral gray (0) -> red (+1)
+    const NEG = [42, 120, 214], MID = [240, 239, 236], POS = [227, 73, 72];
+    const mix = function (a, b, t) { return a.map(function (x, i) { return Math.round(x + (b[i] - x) * t); }); };
+    const esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); };
+    let html = '<table class="heatmap"><caption class="sr-only">Correlation of daily returns between each pair of holdings, from -1 to 1</caption><thead><tr><th scope="col"><span class="sr-only">Ticker</span></th>' +
+      tickers.map(function (t) { return '<th scope="col">' + esc(t) + '</th>'; }).join('') + '</tr></thead><tbody>';
+    tickers.forEach(function (rowT) {
+      html += '<tr><th scope="row">' + esc(rowT) + '</th>';
+      tickers.forEach(function (colT) {
+        const val = D.correlation[rowT][colT];
+        if (val === null || val === undefined || isNaN(val)) { html += '<td>–</td>'; return; }
+        const rgb = val >= 0 ? mix(MID, POS, Math.min(1, val)) : mix(MID, NEG, Math.min(1, -val));
+        const ink = Math.abs(val) > 0.55 ? '#ffffff' : '#0b0b0b';
+        html += '<td style="background:rgb(' + rgb.join(',') + ');color:' + ink + '" title="' +
+          esc(rowT) + ' vs ' + esc(colT) + ': ' + val.toFixed(2) + '">' + val.toFixed(2) + '</td>';
       });
       html += '</tr>';
     });
-    html += '</tbody></table>';
-    corrDiv.innerHTML = html;
+    corrDiv.innerHTML = html + '</tbody></table>';
   }
 })();

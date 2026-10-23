@@ -113,3 +113,56 @@ def validate_holdings(raw_holdings: list[dict]) -> tuple[list[dict], list[tuple[
         clean = clean[:MAX_HOLDINGS]
 
     return clean, errors
+
+
+def parse_risk_free_rate(raw: str | None, default: float, maximum: float) -> tuple[float, str | None]:
+    """Parse the risk-free-rate box (a percent like "4.25") into a decimal.
+
+    Blank means "use the default". Returns ``(rate, error_message_or_None)``;
+    on error the default is returned so the analysis still runs.
+    """
+    raw = (raw or "").strip().rstrip("%")
+    if not raw:
+        return default, None
+    value = parse_number(raw)
+    if value is None or value < 0 or value > maximum * 100:
+        return default, (f"Risk-free rate must be a percent between 0 and {maximum * 100:.0f} "
+                         f"(e.g. 4.25). Used the default {default * 100:.2f}% instead.")
+    return value / 100.0, None
+
+
+def validate_targets(tickers: list[str], raw_pcts: list[str], tolerance_pct: float
+                     ) -> tuple[dict[str, float] | None, list[str]]:
+    """Validate "what if I rebalance" target weights.
+
+    Rules: every box must be a number from 0 to 100 (blank counts as 0), no
+    ticker may appear twice, and the total must be 100% (within
+    ``tolerance_pct``). Returns ``(targets_or_None, errors)``.
+    """
+    errors: list[str] = []
+    targets: dict[str, float] = {}
+    for t, raw in zip(tickers, raw_pcts, strict=False):
+        t = (t or "").strip().upper()
+        if not t:
+            continue
+        if t in targets:
+            errors.append(f"{t} appears twice in the target weights.")
+            continue
+        value = parse_number((raw or "").rstrip("%")) if (raw or "").strip() else 0.0
+        if value is None:
+            errors.append(f"{t}: target weight must be a number.")
+            continue
+        if value < 0:
+            errors.append(f"{t}: target weight can't be negative (this tool doesn't model short selling).")
+            continue
+        if value > 100:
+            errors.append(f"{t}: target weight can't be more than 100%.")
+            continue
+        targets[t] = value
+    if not errors:
+        total = sum(targets.values())
+        if total <= 0:
+            errors.append("Give at least one holding a target weight above 0%.")
+        elif abs(total - 100.0) > tolerance_pct:
+            errors.append(f"Target weights add up to {total:.1f}%; they need to total 100%.")
+    return (None if errors else targets), errors

@@ -1,62 +1,147 @@
 {% extends "base.html" %}
-{% block title %}About & methodology &mdash; Translate My Portfolio{% endblock %}
+{% block title %}Methodology | Translate My Portfolio{% endblock %}
 {% block content %}
-  <header>
-    <h1>About &amp; methodology</h1>
+<article class="method">
+  <header class="hero">
+    <p class="eyebrow">Methodology</p>
+    <h1>How every number is calculated</h1>
+    <p class="tagline">Every figure on the report comes from a formula on this page applied to daily
+    closing prices from Yahoo Finance. Every sentence is a fixed template with those numbers plugged in.
+    There is no AI model writing text or estimating anything.</p>
+    <p class="disclaimer"><strong>Educational only.</strong> This tool is not investment, tax, or legal advice and is not a
+    substitute for a licensed professional. Historical results do not predict future returns.</p>
   </header>
 
-  <section class="about">
-    <h2>What this is</h2>
-    <p>You type in what you own &mdash; ticker, shares, and optionally what you paid and when.
-    The app fetches real price history for each holding and explains, in plain English, how
-    risky and diversified it actually is, based on what genuinely happened to those prices,
-    not a generic lesson.</p>
+  <nav aria-label="On this page">
+    <ul class="toc">
+      <li><a href="#data">Data source</a></li>
+      <li><a href="#weights">Weights and portfolio history</a></li>
+      <li><a href="#concentration">Concentration and HHI</a></li>
+      <li><a href="#returns">CAGR</a></li>
+      <li><a href="#volatility">Volatility</a></li>
+      <li><a href="#drawdown">Maximum drawdown</a></li>
+      <li><a href="#sharpe">Sharpe and Sortino ratios</a></li>
+      <li><a href="#beta">Beta and the S&amp;P 500 benchmark</a></li>
+      <li><a href="#correlation">Correlation</a></li>
+      <li><a href="#crashes">Crash scenarios</a></li>
+      <li><a href="#funds">Fund fees and dividend yield</a></li>
+      <li><a href="#tax">Capital gains</a></li>
+      <li><a href="#behavior">Behavioral flags</a></li>
+      <li><a href="#rebalance">Rebalance comparison</a></li>
+      <li><a href="#risk">Risk score</a></li>
+      <li><a href="#limits">Limitations</a></li>
+    </ul>
+  </nav>
 
-    <h2>Why it's trustworthy</h2>
-    <p>Every sentence you see is built from a number computed from real fetched price data.
-    There's no AI model writing the explanations &mdash; they're template sentences with real
-    numbers plugged in. Nothing is invented, estimated by a language model, or guessed.</p>
-    <p>This app doesn't make money whether you buy, sell, or do nothing &mdash; there's no
-    brokerage relationship, no affiliate links, no incentive to nudge you toward activity.</p>
+  <h2 id="data">Data source</h2>
+  <p>Daily closing prices (adjusted for splits and dividends) for up to {{ config.HISTORY_PERIOD|replace('y', ' years') }},
+  plus sector, fund type, expense ratio, and dividend yield, come from Yahoo Finance through the free, open-source
+  <code>yfinance</code> library. No API key or paid feed is used. The S&amp;P 500 benchmark is the SPDR S&amp;P 500 ETF
+  (<code>{{ config.BENCHMARK_TICKER }}</code>), a fund that tracks the index. Prices are cached for {{ (config.CACHE_TTL_SECONDS // 60) }} minutes.
+  Yahoo's data is unofficial and can contain gaps or errors; it is appropriate for education, not for trading decisions.</p>
 
-    <h2>How each number is calculated</h2>
-    <p><strong>Concentration</strong> is simply each holding's value divided by total portfolio
-    value. A single holding above 25% of the portfolio, or a single sector above 50%, is flagged.</p>
-    <p><strong>Volatility</strong> is the annualized standard deviation of daily returns over the
-    available price history (up to 5 years).</p>
-    <p><strong>Max drawdown</strong> is the largest peak-to-trough decline in the available price
-    history for each holding, and for the portfolio as a whole (weighted by your position sizes).</p>
-    <p><strong>Correlation</strong> measures how closely two holdings' daily price moves track each
-    other, from -1 (perfectly opposite) to 1 (perfectly together). Above 0.7 is flagged as
-    meaningfully overlapping.</p>
-    <p><strong>Historical crash scenarios</strong> apply the real price change each currently-held
-    ticker experienced during the 2020 COVID crash (Feb 19 &ndash; Mar 23, 2020) and the 2022 bear
-    market (Jan 3 &ndash; Oct 12, 2022), weighted by today's position sizes. If a ticker didn't exist
-    yet during a window, it's excluded and the coverage percentage says so.</p>
-    <p><strong>Sharpe ratio</strong> is (annualized return &minus; a 4% assumed risk-free rate) divided
-    by annualized volatility, computed over the overlapping history of your holdings.</p>
-    <p><strong>Risk score (0-100)</strong> is a simple equal-weighted blend of concentration, sector
-    concentration, volatility, correlation, and max drawdown, each scaled against a fixed cap. It's a
-    heuristic meant to give you one number to watch move over time &mdash; not a calibrated
-    institutional risk model.</p>
-    <p><strong>Behavioral flags</strong> are pattern-matches against your entered purchase price and
-    date: buying more than 15% above the price from 30 trading days earlier (recency bias), holding
-    a position down more than 20% for over 180 days (loss aversion), or putting more than 20% of the
-    portfolio into something bought within the last 30 days (a fast, large bet).</p>
-    <p><strong>Tax notes</strong> are based on IRS short-term vs. long-term capital gains treatment:
-    under a year held is short-term (taxed as ordinary income), a year or more is long-term (lower
-    rate). This is general information, not tax advice &mdash; consult a real tax professional for
-    your specific situation.</p>
+  <h2 id="weights">Weights and portfolio history</h2>
+  <code class="formula">weight_i = (shares_i × latest price_i) / total portfolio value</code>
+  <p>Portfolio history uses only the dates on which <em>every</em> holding has a price, so a recently listed stock
+  shortens the window for the whole portfolio (the report states the exact dates). Daily portfolio return is the
+  weighted sum of each holding's daily return using today's weights, which is equivalent to rebalancing back to
+  today's mix every day. Real portfolios drift between rebalances, so treat this as "how this mix has behaved,"
+  not "what you actually earned."</p>
+  <code class="formula">r_portfolio,t = Σ weight_i × r_i,t        value index starts at 1.0 and compounds: V_t = V_(t-1) × (1 + r_portfolio,t)</code>
 
-    <h2>Data source</h2>
-    <p>Price and sector data comes from Yahoo Finance via the free <code>yfinance</code> library.
-    No API key, no paid data feed &mdash; appropriate for personal use, not institutional-scale
-    accuracy guarantees.</p>
+  <h2 id="concentration">Concentration and the Herfindahl-Hirschman index</h2>
+  <code class="formula">HHI = Σ weight_i²        effective number of holdings = 1 / HHI</code>
+  <p>The HHI is the same index regulators use to measure market concentration. Ten equal holdings give HHI 0.10
+  (10 effective holdings); one holding at 91% gives about 1.2. Flags: any single holding above
+  {{ config.CONCENTRATION_FLAG_PCT|int }}%, or any single sector above {{ config.SECTOR_FLAG_PCT|int }}% (diversified funds
+  are not counted as a "sector"). Asset class (individual stock, ETF, mutual fund) comes from Yahoo's quote type.</p>
 
-    <h2>Limitations</h2>
-    <p>This is a personal tool, not investment advice, and not a substitute for a financial advisor.
-    The risk score and thresholds are simple heuristics, not validated against formal risk models.
-    Manual entry means it only knows what you tell it &mdash; it doesn't connect to your actual
-    brokerage account.</p>
-  </section>
+  <h2 id="returns">Compound annual growth rate (CAGR)</h2>
+  <code class="formula">CAGR = (ending value / starting value)^(1 / years) − 1        years = trading days / 252</code>
+
+  <h2 id="volatility">Volatility</h2>
+  <code class="formula">annualized volatility = standard deviation(daily returns) × √252</code>
+  <p>252 is the approximate number of US trading days in a year. Per-holding volatility uses each holding's
+  own full history; portfolio volatility uses the shared window above.</p>
+
+  <h2 id="drawdown">Maximum drawdown</h2>
+  <code class="formula">drawdown_t = V_t / max(V_0 … V_t) − 1        max drawdown = min over t of drawdown_t</code>
+  <p>The largest peak-to-trough loss you would have had to sit through.</p>
+
+  <h2 id="sharpe">Sharpe and Sortino ratios</h2>
+  <code class="formula">daily risk-free rate = (1 + annual rate)^(1/252) − 1
+Sharpe  = mean(r − r_f) / stdev(r) × √252
+Sortino = mean(r − r_f) / √mean(min(r − r_f, 0)²) × √252</code>
+  <p>Both use daily returns over the shared window. The risk-free rate defaults to
+  {{ '%.2f'|format(config.RISK_FREE_RATE * 100) }}% and can be changed on the main page; the current 3-month Treasury bill
+  yield is the usual choice. Sortino only counts downside deviation as risk. Rule of thumb: Sharpe above 1 is strong;
+  below 0 means the portfolio didn't beat cash after accounting for risk over that period.</p>
+
+  <h2 id="beta">Beta and the S&amp;P 500 benchmark</h2>
+  <code class="formula">beta = covariance(r_portfolio, r_SPY) / variance(r_SPY)</code>
+  <p>Every "vs. the S&amp;P 500" figure (CAGR, volatility, drawdown, Sharpe, beta) is computed on <em>exactly the same dates</em>
+  as the portfolio, so the comparison is like for like.</p>
+
+  <h2 id="correlation">Correlation</h2>
+  <p>Pearson correlation of daily returns for each pair of holdings, from −1 (move opposite) to +1 (move together).
+  Pairs above {{ config.HIGH_CORRELATION }} are flagged. A correlation of 0.85 does <em>not</em> mean the two "move together 85% of
+  the time"; it measures how tightly their daily moves line up.</p>
+
+  <h2 id="crashes">Crash scenarios</h2>
+  <p>For each window, each held ticker's real price change from the first to the last trading day is weighted by
+  today's weights. If a holding didn't exist yet, it's excluded, the result is re-weighted over the holdings that did,
+  and the coverage percentage is shown. The window dates are the S&amp;P 500's peak and trough, and SPY's own change
+  over the same dates is shown alongside.</p>
+  <ul>
+    {% for name, window in config.CRASH_WINDOWS.items() %}<li>{{ name }}: {{ window[0] }} to {{ window[1] }}</li>{% endfor %}
+  </ul>
+
+  <h2 id="funds">Fund fees and dividend yield</h2>
+  <code class="formula">value-weighted expense ratio = Σ (value_i × expense ratio_i) / Σ value_i   (funds with a reported ratio only)
+estimated annual fees = Σ value_i × expense ratio_i</code>
+  <p>Funds charging more than {{ '%.2f'|format(config.HIGH_EXPENSE_RATIO_PCT) }}% a year and yields above
+  {{ config.HIGH_DIVIDEND_YIELD_PCT|int }}% are flagged for a second look. Both figures come from Yahoo Finance and
+  can lag the fund's latest prospectus.</p>
+
+  <h2 id="tax">Capital gains (US federal)</h2>
+  <p>A position is <strong>long-term</strong> if held <em>more than one year</em>. The holding period starts the day after
+  purchase, so shares bought January 10, 2023 become long-term on January 11, 2024. Short-term gains are taxed as
+  ordinary income; long-term gains get lower rates (0%, 15% or 20% federally, depending on income). Unrealized gain
+  = (current price − price paid) × shares. If several lots of the same ticker are entered, they're combined at a
+  weighted-average cost, and the most recent purchase date is used (the conservative choice). Losses can offset gains,
+  subject to the wash-sale rule (no buying a substantially identical security within 30 days before or after the sale).
+  Sources: <a href="https://www.irs.gov/publications/p550" rel="noopener">IRS Publication 550</a>,
+  <a href="https://www.irs.gov/taxtopics/tc409" rel="noopener">IRS Topic 409</a>.
+  <strong>This is not tax advice;</strong> state taxes, the net investment income tax, and your situation change the answer.</p>
+
+  <h2 id="behavior">Behavioral flags</h2>
+  <ul>
+    <li><strong>Recency bias:</strong> purchase price more than {{ config.RECENCY_BIAS_RUNUP_PCT|int }}% above the close 30 trading days earlier.</li>
+    <li><strong>Loss aversion:</strong> down more than {{ config.LOSS_AVERSION_LOSS_PCT|abs|int }}% and held over {{ config.LOSS_AVERSION_MIN_HOLD_DAYS }} days.</li>
+    <li><strong>Fast, big bet:</strong> more than {{ config.CONCENTRATED_RECENT_BUY_PCT|int }}% of the portfolio, bought within {{ config.CONCENTRATED_RECENT_BUY_DAYS }} days.</li>
+  </ul>
+  <p>These thresholds are simple, transparent defaults, not calibrated against the behavioral-finance literature.</p>
+
+  <h2 id="rebalance">Rebalance comparison</h2>
+  <p>The target portfolio keeps the same total dollars at your target weights and is analyzed with exactly the same
+  code as your real one. Trades = target value − current value per ticker. Sales of short-term gains are flagged.
+  Commissions, spreads, and taxes are ignored. It shows how the target mix <em>would have</em> behaved, not how it will.</p>
+
+  <h2 id="risk">Risk score (0 to 100)</h2>
+  <p>The average of five sub-scores, each scaled to 0 to 100 against a fixed cap: largest holding
+  ({{ config.RISK_SCORE_CAPS.concentration|int }}% = 100), largest sector ({{ config.RISK_SCORE_CAPS.sector|int }}%),
+  volatility ({{ config.RISK_SCORE_CAPS.volatility|int }}%), highest pairwise correlation (1.0), and max drawdown
+  ({{ config.RISK_SCORE_CAPS.drawdown|int }}%). Bands: under 25 Low, under 50 Moderate, under 75 High, otherwise Very High.
+  It's a heuristic for tracking change over time, not a validated risk model.</p>
+
+  <h2 id="limits">Limitations</h2>
+  <ul>
+    <li>Past performance does not predict future results; five years is a short sample that includes one bull market and two sharp drawdowns.</li>
+    <li>Yahoo Finance data is unofficial and occasionally missing or wrong for thinly traded or non-US symbols.</li>
+    <li>Constant-weight history ignores drift, cash flows, and the timing of your actual purchases.</li>
+    <li>Sector labels for funds are "diversified"; the tool doesn't look through to each fund's holdings, so two funds that own the same stocks can hide overlap (correlation partly catches it).</li>
+    <li>Only the holdings you type in are known. There's no brokerage connection, and nothing is stored.</li>
+  </ul>
+  <p><a class="btn btn-primary" href="{{ url_for('main.index') }}">Analyze a portfolio</a></p>
+</article>
 {% endblock %}

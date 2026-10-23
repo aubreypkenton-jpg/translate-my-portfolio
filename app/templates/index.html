@@ -1,166 +1,370 @@
 {% extends "base.html" %}
+
+{% macro entry_row(h={}) %}
+  <tr class="holding-row">
+    <td data-label="Ticker"><input type="text" name="ticker" placeholder="AAPL" aria-label="Ticker symbol" value="{{ h.get('ticker') or '' }}" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="15"></td>
+    <td data-label="Shares"><input type="text" inputmode="decimal" name="shares" placeholder="10" aria-label="Number of shares" value="{{ h.get('shares')|clean_num }}"></td>
+    <td data-label="Price paid (optional)"><input type="text" inputmode="decimal" name="purchase_price" placeholder="150.00" aria-label="Price you paid per share (optional)" value="{{ h.get('purchase_price')|clean_num }}"></td>
+    <td data-label="Date bought (optional)"><input type="date" name="purchase_date" aria-label="Date you bought it (optional)" value="{{ h.get('purchase_date') or '' }}"></td>
+    <td class="remove-cell"><button type="button" class="remove-row" aria-label="Remove this holding">&times;</button></td>
+  </tr>
+{% endmacro %}
+
 {% block content %}
-  <header>
+  <header class="hero">
+    <p class="eyebrow">Free portfolio risk report</p>
     <h1>Translate My Portfolio</h1>
     <p class="tagline">Type in what you own. Get a plain-English breakdown of risk, diversification,
-    and your own buying patterns &mdash; grounded in real price history, not guesses.
-    No sign-up, nothing saved, no incentive to get you to trade.</p>
+    taxes, and your own buying patterns, computed from real price history and benchmarked against the S&amp;P&nbsp;500.</p>
+    <ul class="chips" aria-label="How this tool works">
+      <li>No sign-up</li><li>Nothing saved</li><li>No AI-written text</li><li>Real Yahoo Finance data</li>
+      <li><a href="{{ url_for('main.about') }}">Every formula shown</a></li>
+    </ul>
   </header>
 
   {% if errors %}
-    <div class="alert" role="alert">
-      <strong>Fix the following:</strong>
+    <div class="alert alert-error" role="alert">
+      <strong>Please check the following:</strong>
       <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
     </div>
   {% endif %}
   {% if failed %}
-    <div class="alert" role="alert">Couldn't find data for: {{ failed|join(', ') }}. Check the ticker symbols.</div>
+    <div class="alert alert-warn" role="alert">Couldn't find price data for: <strong>{{ failed|join(', ') }}</strong>.
+      Check the symbols (for example <code>BRK-B</code>, not <code>BRK B</code>); {% if result %}the rest of the portfolio was analyzed without them.{% else %}nothing could be analyzed.{% endif %}</div>
   {% endif %}
   {% if notes %}
-    <div class="info-note" role="status">{% for n in notes %}<p>{{ n }}</p>{% endfor %}</div>
+    <div class="alert alert-info" role="status">{% for n in notes %}<p>{{ n }}</p>{% endfor %}</div>
   {% endif %}
 
-  {% if not result %}
-    <p class="example-hint">New here? <button type="button" id="fill-example" class="link-btn">Load an example portfolio</button> to see what this looks like before typing in your own.</p>
-  {% endif %}
-
-  <form method="POST" action="/analyze" id="holdings-form" class="no-print" aria-label="Enter your holdings" enctype="multipart/form-data">
-    <table id="holdings-table">
-      <caption class="sr-only">Your holdings: ticker, shares, purchase price, and purchase date</caption>
-      <thead>
-        <tr>
-          <th scope="col">Ticker</th>
-          <th scope="col">Shares</th>
-          <th scope="col">Price you paid <span class="opt">(optional)</span></th>
-          <th scope="col">Date you bought <span class="opt">(optional)</span></th>
-          <th scope="col"><span class="sr-only">Remove</span></th>
-        </tr>
-      </thead>
-      <tbody id="holdings-body">
-        <tr class="holding-row">
-          <td><input type="text" name="ticker" placeholder="AAPL" aria-label="Ticker symbol"></td>
-          <td><input type="number" step="any" min="0" name="shares" placeholder="10" aria-label="Number of shares"></td>
-          <td><input type="number" step="any" min="0" name="purchase_price" placeholder="150.00" aria-label="Price you paid per share (optional)"></td>
-          <td><input type="date" name="purchase_date" aria-label="Date you bought it (optional)"></td>
-          <td><button type="button" class="remove-row" onclick="removeRow(this)" aria-label="Remove this holding">&times;</button></td>
-        </tr>
-      </tbody>
-    </table>
-    <button type="button" id="add-row">+ Add another holding</button>
-
-    <div class="csv-upload">
-      <label for="csv_file">Or upload a CSV instead <span class="opt">(optional -- adds to any rows above)</span></label>
-      <input type="file" id="csv_file" name="csv_file" accept=".csv,text/csv">
-      <p class="muted-note">Columns: <code>ticker, shares, purchase_price, purchase_date</code> (only ticker and shares are required; header row required).</p>
+  <section class="card no-print" aria-labelledby="form-heading">
+    <h2 id="form-heading" style="margin-top:0">{% if result %}Edit and re-run{% else %}Enter your holdings{% endif %}</h2>
+    <div class="examples" role="group" aria-label="Example portfolios">
+      <span class="examples-label">Try an example:</span>
+      {% for ex in examples %}
+        <button type="button" class="btn-small example-btn" {% if loop.first %}id="fill-example"{% endif %}
+                data-example="{{ ex.id }}" title="{{ ex.blurb }}">{{ ex.label }}</button>
+      {% endfor %}
     </div>
 
-    <button type="submit" id="analyze-btn">
-      <span class="btn-label">Analyze my portfolio</span>
-      <span class="btn-spinner" hidden><span class="spinner" aria-hidden="true"></span> Working&hellip;</span>
-    </button>
-  </form>
+    <form method="POST" action="{{ url_for('main.analyze') }}" id="holdings-form" aria-label="Enter your holdings" enctype="multipart/form-data">
+      <table class="entry-table" id="holdings-table">
+        <caption class="sr-only">Your holdings: ticker, shares, purchase price, and purchase date</caption>
+        <thead>
+          <tr>
+            <th scope="col">Ticker</th>
+            <th scope="col">Shares</th>
+            <th scope="col">Price you paid <span class="opt">(optional)</span></th>
+            <th scope="col">Date you bought <span class="opt">(optional)</span></th>
+            <th scope="col"><span class="sr-only">Remove</span></th>
+          </tr>
+        </thead>
+        <tbody id="holdings-body">
+          {% for h in holdings %}{{ entry_row(h) }}{% else %}{{ entry_row() }}{{ entry_row() }}{% endfor %}
+        </tbody>
+      </table>
+      <button type="button" id="add-row" class="btn-small">+ Add another holding</button>
+
+      <details class="advanced"{% if risk_free_pct != 4.0 %} open{% endif %}>
+        <summary>More options: CSV upload, risk-free rate</summary>
+        <div class="advanced-grid">
+          <div>
+            <label for="csv_file">Upload a CSV <span class="opt">(adds to the rows above)</span></label>
+            <input type="file" id="csv_file" name="csv_file" accept=".csv,text/csv">
+            <span class="field-help">Columns: <code>ticker, shares, purchase_price, purchase_date</code>. Only ticker and shares are required.</span>
+          </div>
+          <div>
+            <label for="risk_free_rate">Risk-free rate (% per year)</label>
+            <input type="text" inputmode="decimal" id="risk_free_rate" name="risk_free_rate" value="{{ '%.2f'|format(risk_free_pct) }}" aria-describedby="rf-help">
+            <span class="field-help" id="rf-help">Used for the Sharpe and Sortino ratios. A common choice is the current
+              3-month US Treasury bill yield (published at <a href="https://home.treasury.gov/resource-center/data-chart-center/interest-rates" rel="noopener">treasury.gov</a>).</span>
+          </div>
+        </div>
+      </details>
+
+      <div class="form-actions">
+        <button type="submit" id="analyze-btn" class="btn-primary">
+          <span class="btn-label">Analyze my portfolio</span>
+          <span class="btn-spinner" hidden><span class="spinner" aria-hidden="true"></span> Fetching prices&hellip;</span>
+        </button>
+        <span class="muted-note">First run can take 10 to 20 seconds while price history loads.</span>
+      </div>
+    </form>
+  </section>
 
   {% if result %}
+  {% set ex = explanations %}
   <section class="results" aria-label="Analysis results">
-    <div class="results-header">
-      <h2>Overview</h2>
-      {% if result.risk_score is not none %}
-      <div class="risk-badge risk-{{ result.risk_label|lower|replace(' ', '-') }}" role="status">
-        <span class="risk-score-num">{{ "%.0f"|format(result.risk_score) }}</span>
-        <span class="risk-score-label">/100 &middot; {{ result.risk_label }} risk</span>
+    <p class="print-only"><strong>Translate My Portfolio report</strong> &middot; as of {{ result.as_of }} &middot; educational only, not investment advice.</p>
+
+    <div class="card">
+      <div class="results-header">
+        <div>
+          <p class="eyebrow">Report as of {{ result.as_of }}</p>
+          <h2 style="margin-top:0">Overview</h2>
+        </div>
+        {% if result.risk_score is not none %}
+        <div class="risk-badge risk-{{ result.risk_label|lower|replace(' ', '-') }}" role="status">
+          <span class="risk-score-num">{{ "%.0f"|format(result.risk_score) }}<span class="risk-score-label">/100</span></span>
+          <span class="risk-score-label">{{ result.risk_label }} risk</span>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="stat-grid">
+        <div class="stat"><span class="stat-label">Portfolio value</span><span class="stat-value">{{ result.total_value|money }}</span><span class="stat-sub">{{ result.rows|length }} holding(s)</span></div>
+        <div class="stat"><span class="stat-label">Annual return (CAGR)</span><span class="stat-value">{{ result.portfolio_cagr|pct(1) }}</span>
+          <span class="stat-sub">S&amp;P 500: {{ result.benchmark.cagr_pct|pct(1) if result.benchmark else '–' }}</span></div>
+        <div class="stat"><span class="stat-label">Volatility (annual)</span><span class="stat-value">{{ result.portfolio_vol|pct(0) }}</span>
+          <span class="stat-sub">S&amp;P 500: {{ result.benchmark.annualized_vol_pct|pct(0) if result.benchmark else '–' }}</span></div>
+        <div class="stat"><span class="stat-label">Max drawdown</span><span class="stat-value">{{ result.portfolio_max_drawdown|pct(0) }}</span>
+          <span class="stat-sub">S&amp;P 500: {{ result.benchmark.max_drawdown_pct|pct(0) if result.benchmark else '–' }}</span></div>
+        <div class="stat"><span class="stat-label">Sharpe ratio</span><span class="stat-value">{{ result.sharpe_ratio|num(2) }}</span>
+          <span class="stat-sub">rf {{ result.risk_free_rate_pct|pct(2) }} &middot; Sortino {{ result.sortino_ratio|num(2) }}</span></div>
+        <div class="stat"><span class="stat-label">Effective holdings</span><span class="stat-value">{{ result.effective_holdings|num(1) }}</span>
+          <span class="stat-sub">HHI {{ result.hhi|num(2) }}{% if result.beta is not none %} &middot; beta {{ result.beta|num(2) }}{% endif %}</span></div>
+      </div>
+
+      <div class="section-text">
+        {% for line in ex.overview %}<p>{{ line }}</p>{% endfor %}
+        {% for line in ex.risk_score %}<p class="muted-note">{{ line }}</p>{% endfor %}
+      </div>
+
+      {% if checklist %}
+        <h3>Health checklist</h3>
+        <ul class="checklist" aria-label="Portfolio health checklist">
+          {% for item in checklist %}
+            <li class="checklist-{{ item.status }}">
+              <span class="status-tag">{{ {'pass': 'Pass', 'warn': 'Check', 'na': 'N/A'}[item.status] }}</span>
+              <span class="checklist-label">{{ item.label }}</span>
+              <span class="checklist-detail">{{ item.detail }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
+      <h3>Holdings</h3>
+      <div class="table-scroll">
+        <table class="data-table holdings-summary">
+          <caption class="sr-only">Breakdown of each holding</caption>
+          <thead>
+            <tr>
+              <th scope="col">Ticker</th><th scope="col" class="text">Type</th><th scope="col" class="text">Sector</th>
+              <th scope="col">Value</th><th scope="col">Weight</th><th scope="col">Gain/loss</th>
+              <th scope="col">Volatility</th><th scope="col">Worst drawdown</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in result.rows|sort(attribute='weight_pct', reverse=True) %}
+            <tr>
+              <th scope="row">{{ r.ticker }}</th>
+              <td class="text">{{ r.asset_class }}</td>
+              <td class="text">{{ r.sector }}</td>
+              <td>{{ r.value|money }}</td>
+              <td>{{ r.weight_pct|pct(1) }}</td>
+              <td class="{{ 'pos' if r.gain_loss_pct is not none and r.gain_loss_pct >= 0 else ('neg' if r.gain_loss_pct is not none else '') }}">{{ r.gain_loss_pct|pct(1, signed=True) }}</td>
+              <td>{{ result.volatility.get(r.ticker)|pct(0) }}</td>
+              <td>{{ r.max_drawdown_pct|pct(0) }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="chart-grid">
+      {% if chart_data.growth.dates %}
+      <div class="chart-card wide">
+        <h3>Growth of $10,000 vs. the S&amp;P 500</h3>
+        <p>This mix at today's weights, replayed over {{ result.analysis_window.start }} to {{ result.analysis_window.end }}. Dashed line: SPY.</p>
+        <div class="chart-box tall"><canvas id="growthChart" role="img" aria-label="Line chart comparing growth of $10,000 in this portfolio with the S&amp;P 500"></canvas></div>
+      </div>
+      <div class="chart-card wide">
+        <h3>Drawdown: how far below its last peak</h3>
+        <p>0% means at a new high. Deeper dips mean bigger paper losses you'd have had to sit through.</p>
+        <div class="chart-box"><canvas id="drawdownChart" role="img" aria-label="Line chart of drawdown from peak for this portfolio and the S&amp;P 500"></canvas></div>
+      </div>
+      {% endif %}
+      <div class="chart-card">
+        <h3>Allocation by holding</h3>
+        <div class="chart-box"><canvas id="allocationChart" role="img" aria-label="Bar chart of each holding's percent of the portfolio"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>Sector mix</h3>
+        <div class="chart-box"><canvas id="sectorChart" role="img" aria-label="Bar chart of percent of the portfolio in each sector"></canvas></div>
+      </div>
+      {% if result.asset_class_pct and result.asset_class_pct|length > 0 and result.asset_class_pct.keys()|list != ['Other / unknown'] %}
+      <div class="chart-card">
+        <h3>Asset class mix</h3>
+        <div class="chart-box"><canvas id="assetClassChart" role="img" aria-label="Bar chart of percent of the portfolio in each asset class"></canvas></div>
       </div>
       {% endif %}
     </div>
-    {% for line in explanations.overview %}<p>{{ line }}</p>{% endfor %}
-    {% for line in explanations.risk_score %}<p class="muted-note">{{ line }}</p>{% endfor %}
 
-    {% if checklist %}
-      <ul class="checklist" aria-label="Portfolio health checklist">
-        {% for item in checklist %}
-          <li class="checklist-{{ item.status }}">
-            <span class="checklist-icon" aria-hidden="true">{{ '✅' if item.status == 'pass' else ('⚠️' if item.status == 'warn' else '—') }}</span>
-            <span class="checklist-label">{{ item.label }}</span>
-            <span class="checklist-detail">{{ item.detail }}</span>
-          </li>
-        {% endfor %}
-      </ul>
-    {% endif %}
-
-    <table class="holdings-summary">
-      <caption class="sr-only">Breakdown of each holding</caption>
-      <thead>
-        <tr>
-          <th scope="col">Ticker</th><th scope="col">Sector</th><th scope="col">Value</th>
-          <th scope="col">% of portfolio</th><th scope="col">Gain/Loss</th><th scope="col">Max drawdown (history)</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for r in result.rows %}
-        <tr>
-          <th scope="row">{{ r.ticker }}</th>
-          <td>{{ r.sector }}</td>
-          <td>${{ "%.2f"|format(r.value) }}</td>
-          <td>{{ "%.1f"|format(r.weight_pct) }}%</td>
-          <td class="{{ 'pos' if r.gain_loss_pct and r.gain_loss_pct >= 0 else 'neg' }}">
-            {% if r.gain_loss_pct is not none %}{{ "%.1f"|format(r.gain_loss_pct) }}%{% else %}&mdash;{% endif %}
-          </td>
-          <td class="neg">{% if r.max_drawdown_pct is not none %}{{ "%.1f"|format(r.max_drawdown_pct) }}%{% else %}&mdash;{% endif %}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-
-    <div class="chart-grid">
-      <div class="chart-card"><h3>Allocation</h3><canvas id="allocationChart" role="img" aria-label="Donut chart of portfolio allocation by holding"></canvas></div>
-      <div class="chart-card"><h3>Sector mix</h3><canvas id="sectorChart" role="img" aria-label="Bar chart of portfolio allocation by sector"></canvas></div>
-    </div>
-    <div class="chart-card wide"><h3>Relative performance (rebased to 100)</h3><canvas id="rebasedChart" role="img" aria-label="Line chart of each holding's price history, rebased to start at 100"></canvas></div>
-
-    {% if explanations.concentration %}
+    {% if ex.concentration %}
       <h2>Concentration</h2>
-      {% for line in explanations.concentration %}<p>{{ line }}</p>{% endfor %}
+      <div class="section-text">{% for line in ex.concentration %}<p>{{ line }}</p>{% endfor %}</div>
     {% endif %}
 
-    {% if explanations.volatility %}
-      <h2>Volatility &amp; risk-adjusted return</h2>
-      {% for line in explanations.volatility %}<p>{{ line }}</p>{% endfor %}
+    {% if ex.funds %}
+      <h2>Fund fees and dividends</h2>
+      <div class="section-text">{% for line in ex.funds %}<p>{{ line }}</p>{% endfor %}</div>
     {% endif %}
 
-    {% if explanations.correlation or result.correlation_matrix %}
-      <h2>Hidden overlap</h2>
-      {% for line in explanations.correlation %}<p>{{ line }}</p>{% endfor %}
+    {% if ex.volatility %}
+      <h2>Volatility and risk-adjusted return</h2>
+      <div class="section-text">{% for line in ex.volatility %}<p>{{ line }}</p>{% endfor %}</div>
+    {% endif %}
+
+    {% if ex.benchmark %}
+      <h2>Vs. the S&amp;P 500</h2>
+      <div class="section-text">{% for line in ex.benchmark %}<p>{{ line }}</p>{% endfor %}</div>
+    {% endif %}
+
+    {% if ex.correlation or result.correlation_matrix %}
+      <h2>Hidden overlap (correlation)</h2>
+      <div class="section-text">
+        {% for line in ex.correlation %}<p>{{ line }}</p>{% endfor %}
+        {% if not ex.correlation %}<p>No pair of holdings is highly correlated (above {{ '%.1f'|format(0.7) }}).</p>{% endif %}
+      </div>
       {% if result.correlation_matrix %}
-        <div id="correlationTable" role="table" aria-label="Correlation between holdings"></div>
+        <div class="legend-ramp" aria-hidden="true">-1 <span class="bar"></span> +1 (moves together)</div>
+        <div class="table-scroll"><div id="correlationTable"></div></div>
       {% endif %}
     {% endif %}
 
-    {% if explanations.drawdown %}
-      <h2>What a real crash would have done to this</h2>
-      {% for line in explanations.drawdown %}<p>{{ line }}</p>{% endfor %}
+    {% if ex.drawdown %}
+      <h2>What real crashes would have done to this</h2>
+      <div class="section-text">{% for line in ex.drawdown %}<p>{{ line }}</p>{% endfor %}</div>
     {% endif %}
 
-    {% if explanations.benchmark %}
-      <h2>Vs. the S&amp;P 500</h2>
-      {% for line in explanations.benchmark %}<p>{{ line }}</p>{% endfor %}
-    {% endif %}
-
-    {% if explanations.behavioral %}
+    {% if ex.behavioral %}
       <h2>Your buying patterns</h2>
-      {% for line in explanations.behavioral %}<p>{{ line }}</p>{% endfor %}
+      <div class="section-text">{% for line in ex.behavioral %}<p>{{ line }}</p>{% endfor %}</div>
     {% endif %}
 
-    {% if explanations.tax %}
-      <h2>Tax basics on these</h2>
-      {% for line in explanations.tax %}<p>{{ line }}</p>{% endfor %}
+    {% if result.tax_flags %}
+      <h2>Capital gains basics</h2>
+      <div class="table-scroll">
+        <table class="data-table">
+          <caption class="sr-only">Holding period and unrealized gain or loss per position</caption>
+          <thead><tr><th scope="col">Ticker</th><th scope="col">Held</th><th scope="col" class="text">If sold today</th><th scope="col">Unrealized</th><th scope="col">Long-term in</th></tr></thead>
+          <tbody>
+          {% for tf in result.tax_flags %}
+            <tr>
+              <th scope="row">{{ tf.ticker }}</th>
+              <td>{{ tf.holding_days }} days</td>
+              <td class="text">{{ tf.term|capitalize }}</td>
+              <td class="{{ 'pos' if tf.status == 'gain' else ('neg' if tf.status == 'loss' else '') }}">{{ tf.unrealized_gain|money(signed=True) }}</td>
+              <td>{{ (tf.days_until_long_term ~ ' days') if tf.days_until_long_term else '–' }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="section-text">{% for line in ex.tax %}<p{% if loop.last %} class="disclaimer"{% endif %}>{{ line }}</p>{% endfor %}</div>
     {% endif %}
 
-    {% if explanations.reflect %}
+    <h2 id="rebalance">What if I rebalance?</h2>
+    <div class="card no-print">
+      <p>Set target weights (they must add up to 100%). You'll see the trades it would take and how the same
+        metrics would have looked. This replays history; it doesn't predict the future.</p>
+      {% if rebalance_errors %}
+        <div class="alert alert-error" role="alert"><ul>{% for e in rebalance_errors %}<li>{{ e }}</li>{% endfor %}</ul></div>
+      {% endif %}
+      <form method="POST" action="{{ url_for('main.analyze') }}#rebalance" id="rebalance-form">
+        {% for h in holdings %}
+          <input type="hidden" name="ticker" value="{{ h.ticker }}">
+          <input type="hidden" name="shares" value="{{ h.shares }}">
+          <input type="hidden" name="purchase_price" value="{{ h.purchase_price or '' }}">
+          <input type="hidden" name="purchase_date" value="{{ h.purchase_date or '' }}">
+        {% endfor %}
+        <input type="hidden" name="risk_free_rate" value="{{ '%.4f'|format(risk_free_pct) }}">
+        <input type="hidden" name="rebalance" value="1">
+        <div class="rebalance-grid">
+          {% for r in result.rows|sort(attribute='weight_pct', reverse=True) %}
+            <div>
+              <label for="target-{{ r.ticker }}">{{ r.ticker }} <span class="opt">now {{ r.weight_pct|pct(1) }}</span></label>
+              <input type="hidden" name="target_ticker" value="{{ r.ticker }}">
+              <input type="text" inputmode="decimal" class="target-input" id="target-{{ r.ticker }}" name="target_pct"
+                     data-current="{{ '%.1f'|format(r.weight_pct) }}"
+                     value="{{ '%.1f'|format(targets.get(r.ticker)) if targets.get(r.ticker) is not none else '%.1f'|format(r.weight_pct) }}">
+            </div>
+          {% endfor %}
+        </div>
+        <div class="form-actions">
+          <span>Total: <span id="target-sum" class="sum-indicator" aria-live="polite">100.0%</span></span>
+          <button type="button" class="btn-small" id="equal-weight">Equal weight</button>
+          <button type="button" class="btn-small" id="reset-weights">Reset to current</button>
+          <button type="submit" class="btn-primary">Compare</button>
+        </div>
+      </form>
+    </div>
+
+    {% if rebalance %}
+      {% set cmp = rebalance.comparison %}
+      <div class="card" id="rebalance-results">
+        <h3>Trades to get there</h3>
+        {% if rebalance.trades %}
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th scope="col">Ticker</th><th scope="col" class="text">Action</th><th scope="col">Amount</th><th scope="col">Now</th><th scope="col">Target</th></tr></thead>
+            <tbody>
+            {% for t in rebalance.trades %}
+              <tr>
+                <th scope="row">{{ t.ticker }}</th>
+                <td class="text">{{ t.action|capitalize }}{% if t.short_term_gain_warning %} <span class="neg">(short-term gain: taxed as ordinary income)</span>{% endif %}</td>
+                <td>{{ t.amount|money }}</td><td>{{ t.current_pct|pct(1) }}</td><td>{{ t.target_pct|pct(1) }}</td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}<p>You're already at those weights.</p>{% endif %}
+
+        <h3>Before vs. after (same history, same dollars)</h3>
+        <div class="table-scroll">
+          <table class="data-table" id="rebalance-compare">
+            <thead><tr><th scope="col">Metric</th><th scope="col">Current</th><th scope="col">Target</th></tr></thead>
+            <tbody>
+              {% set metrics = [
+                ('Largest holding', 'top_pct', 'pct1', 'lower'),
+                ('Effective holdings', 'effective_holdings', 'num1', 'higher'),
+                ('Annual return (CAGR)', 'portfolio_cagr', 'pct1', 'higher'),
+                ('Volatility', 'portfolio_vol', 'pct1', 'lower'),
+                ('Max drawdown', 'portfolio_max_drawdown', 'pct1', 'higher'),
+                ('Sharpe ratio', 'sharpe_ratio', 'num2', 'higher'),
+                ('Beta vs. S&P 500', 'beta', 'num2', 'none'),
+                ('Risk score', 'risk_score', 'num0', 'lower'),
+              ] %}
+              {% for label, key, fmt, better in metrics %}
+                {% set c = cmp[key].current %}{% set t = cmp[key].target %}
+                {% set cs = c|pct(1) if fmt == 'pct1' else c|num(fmt[-1]|int) %}
+                {% set ts = t|pct(1) if fmt == 'pct1' else t|num(fmt[-1]|int) %}
+                <tr>
+                  <th scope="row">{{ label }}</th>
+                  <td>{{ cs }}</td>
+                  <td class="{% if c is not none and t is not none and better != 'none' and cs != ts %}{{ 'better' if (t > c) == (better == 'higher') else 'worse' }}{% endif %}">{{ ts }}</td>
+                </tr>
+              {% endfor %}
+              {% for key, v in cmp.items() if key.startswith('crash:') %}
+                <tr><th scope="row">{{ key[6:] }}</th><td>{{ v.current|pct(1, signed=True) }}</td>
+                  <td class="{% if v.current is not none and v.target is not none and v.current|pct(1) != v.target|pct(1) %}{{ 'better' if v.target > v.current else 'worse' }}{% endif %}">{{ v.target|pct(1, signed=True) }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <p class="muted-note">Green means better on that metric, red worse; a higher return with higher volatility is a trade-off, not a win.
+          Trades ignore commissions, bid-ask spreads, and taxes. Educational only, not a recommendation to trade.</p>
+      </div>
+    {% endif %}
+
+    {% if ex.reflect %}
       <h2>Worth sitting with</h2>
-      {% for line in explanations.reflect %}<p class="reflect">{{ line }}</p>{% endfor %}
+      {% for line in ex.reflect %}<p class="reflect">{{ line }}</p>{% endfor %}
     {% endif %}
 
     {% if glossary %}
-      <details class="glossary">
+      <details class="glossary card">
         <summary>Glossary of terms used above ({{ glossary|length }})</summary>
         <dl>
           {% for key, definition in glossary %}
@@ -172,103 +376,27 @@
     {% endif %}
 
     <div class="action-row no-print">
-      <button type="button" onclick="window.print()">Print / save as PDF</button>
+      <button type="button" id="print-btn">Print / save as PDF</button>
       <button type="button" id="copy-summary-btn">Copy one-line summary</button>
       <button type="button" id="download-json-btn">Download raw data (JSON)</button>
-      <span id="copy-confirm" class="muted-note" hidden>Copied.</span>
+      <span id="copy-confirm" class="muted-note" role="status" hidden>Copied.</span>
     </div>
   </section>
   {% endif %}
 
-  <template id="row-template">
-    <tr class="holding-row">
-      <td><input type="text" name="ticker" placeholder="AAPL" aria-label="Ticker symbol" required></td>
-      <td><input type="number" step="any" min="0" name="shares" placeholder="10" aria-label="Number of shares" required></td>
-      <td><input type="number" step="any" min="0" name="purchase_price" placeholder="150.00" aria-label="Price you paid per share (optional)"></td>
-      <td><input type="date" name="purchase_date" aria-label="Date you bought it (optional)"></td>
-      <td><button type="button" class="remove-row" onclick="removeRow(this)" aria-label="Remove this holding">&times;</button></td>
-    </tr>
-  </template>
+  <template id="row-template">{{ entry_row() }}</template>
 {% endblock %}
 
 {% block scripts %}
   <script>
-    function addRow(values) {
-      const tmpl = document.getElementById('row-template');
-      const clone = tmpl.content.cloneNode(true);
-      if (values) {
-        const inputs = clone.querySelectorAll('input');
-        inputs[0].value = values.ticker || '';
-        inputs[1].value = values.shares || '';
-        inputs[2].value = values.purchase_price || '';
-        inputs[3].value = values.purchase_date || '';
-      }
-      document.getElementById('holdings-body').appendChild(clone);
-    }
-    document.getElementById('add-row').addEventListener('click', function () { addRow(); });
-    function removeRow(btn) {
-      const rows = document.querySelectorAll('.holding-row');
-      if (rows.length > 1) { btn.closest('tr').remove(); }
-    }
-    document.getElementById('holdings-form').addEventListener('submit', function () {
-      document.querySelector('#analyze-btn .btn-label').hidden = true;
-      document.querySelector('#analyze-btn .btn-spinner').hidden = false;
-      document.getElementById('analyze-btn').disabled = true;
-    });
-
-    const fillExampleBtn = document.getElementById('fill-example');
-    if (fillExampleBtn) {
-      fillExampleBtn.addEventListener('click', function () {
-        // clear the default empty row, then load a small sample portfolio
-        document.getElementById('holdings-body').innerHTML = '';
-        const example = [
-          {ticker: 'AAPL', shares: '10', purchase_price: '150', purchase_date: '2022-06-01'},
-          {ticker: 'MSFT', shares: '5', purchase_price: '250', purchase_date: '2021-03-15'},
-          {ticker: 'SPY', shares: '8', purchase_price: '380', purchase_date: '2023-01-10'},
-        ];
-        example.forEach(addRow);
-        document.getElementById('holdings-form').scrollIntoView({behavior: 'smooth'});
-      });
-    }
-
-    {% if chart_json %}
-    const CHART_DATA = {{ chart_json | safe }};
-    {% else %}
-    const CHART_DATA = null;
-    {% endif %}
-
-    {% if summary_text %}
-    const SUMMARY_TEXT = {{ summary_text | tojson }};
-    {% endif %}
-    {% if export_json %}
-    const EXPORT_JSON = {{ export_json | safe }};
-    {% endif %}
-
-    const copyBtn = document.getElementById('copy-summary-btn');
-    if (copyBtn) {
-      copyBtn.addEventListener('click', function () {
-        navigator.clipboard.writeText(SUMMARY_TEXT).then(function () {
-          const confirm = document.getElementById('copy-confirm');
-          confirm.hidden = false;
-          setTimeout(function () { confirm.hidden = true; }, 2000);
-        });
-      });
-    }
-
-    const downloadBtn = document.getElementById('download-json-btn');
-    if (downloadBtn) {
-      downloadBtn.addEventListener('click', function () {
-        const blob = new Blob([JSON.stringify(EXPORT_JSON, null, 2)], {type: 'application/json'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'portfolio-analysis.json';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-      });
-    }
+    window.EXAMPLES = {{ examples|tojson }};
+    window.CHART_DATA = {{ chart_data|tojson if chart_data else 'null' }};
+    window.SUMMARY_TEXT = {{ summary_text|tojson if summary_text else 'null' }};
+    window.EXPORT_JSON = {{ export_data|tojson if export_data else 'null' }};
   </script>
-  <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% if chart_data %}
+    <script src="{{ url_for('static', filename='vendor/chart-4.4.4.umd.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+  {% endif %}
 {% endblock %}

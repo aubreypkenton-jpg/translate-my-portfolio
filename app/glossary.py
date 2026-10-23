@@ -46,6 +46,34 @@ GLOSSARY = {
         "Capital gains tax: tax on profit when you sell. Short-term (held under a year) "
         "is taxed as regular income; long-term (a year or more) gets a lower rate."
     ),
+    "hhi": (
+        "Herfindahl-Hirschman index (HHI): the sum of each holding's squared weight. It runs "
+        "from near 0 (many tiny holdings) to 1 (everything in one); 1/HHI is the 'effective' number of holdings."
+    ),
+    "asset_class": (
+        "Asset class: the broad kind of investment (individual stock, ETF, mutual fund, crypto). "
+        "Funds hold many companies at once; an individual stock is a bet on one."
+    ),
+    "sortino_ratio": (
+        "Sortino ratio: like the Sharpe ratio, but only downside swings count as risk, "
+        "so a fund isn't penalized for big up days."
+    ),
+    "beta": (
+        "Beta: how much a portfolio has tended to move when the market moves. 1.0 moves with "
+        "the S&P 500; 1.3 moves about 30% more; 0.7 about 30% less."
+    ),
+    "expense_ratio": (
+        "Expense ratio: the yearly fee a fund charges, as a percent of what you have invested. "
+        "0.50% means $5 a year for every $1,000."
+    ),
+    "dividend_yield": (
+        "Dividend yield: a year of dividends divided by the current price. Higher isn't automatically "
+        "better; a falling price pushes the yield up."
+    ),
+    "wash_sale": (
+        "Wash-sale rule: if you sell at a loss and buy the same or a substantially identical "
+        "investment within 30 days before or after, the IRS disallows that loss for now."
+    ),
     "risk_score": (
         "Risk score: this app's own 0-100 blend of concentration, volatility, correlation, "
         "and drawdown into one number, meant to give you something simple to track over time."
@@ -54,11 +82,13 @@ GLOSSARY = {
 
 # maps an explanation section (from explain.py) to the glossary terms it can surface
 SECTION_TERMS = {
-    "concentration": ["concentration", "diversification"],
-    "volatility": ["volatility", "max_drawdown", "sharpe_ratio"],
+    "concentration": ["concentration", "diversification", "hhi", "asset_class"],
+    "funds": ["expense_ratio", "dividend_yield"],
+    "volatility": ["volatility", "max_drawdown", "sharpe_ratio", "sortino_ratio"],
+    "benchmark": ["cagr", "beta"],
     "correlation": ["correlation"],
     "behavioral": ["recency_bias", "loss_aversion"],
-    "tax": ["capital_gains"],
+    "tax": ["capital_gains", "wash_sale"],
     "risk_score": ["risk_score"],
 }
 

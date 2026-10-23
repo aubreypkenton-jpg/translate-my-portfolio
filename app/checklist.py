@@ -8,7 +8,8 @@ checklist" is a different concern from "how do we calculate it."
 from . import config
 
 
-def build_checklist(result):
+def build_checklist(result: dict) -> list[dict]:
+    """Pass / warn / n-a items built only from numbers compute.py produced."""
     items = []
 
     c = result["concentration"]
@@ -45,6 +46,14 @@ def build_checklist(result):
         "status": "warn" if result["behavioral_flags"] else "pass",
         "detail": f"{len(result['behavioral_flags'])} flagged" if result["behavioral_flags"] else "n/a",
     })
+
+    if result.get("weighted_expense_ratio_pct") is not None:
+        er = result["weighted_expense_ratio_pct"]
+        items.append({
+            "label": f"Fund fees at or below {config.HIGH_EXPENSE_RATIO_PCT:.2f}% a year (value-weighted)",
+            "status": "warn" if er > config.HIGH_EXPENSE_RATIO_PCT else "pass",
+            "detail": f"{er:.2f}%",
+        })
 
     if result.get("risk_score") is not None:
         items.append({
