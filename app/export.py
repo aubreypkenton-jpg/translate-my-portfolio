@@ -5,6 +5,8 @@ JSON export of the full analysis (for keeping or feeding into something
 else). Both are built from the same result dict everything else uses --
 nothing new is computed here.
 """
+from __future__ import annotations
+
 from datetime import datetime, timezone
 
 

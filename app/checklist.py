@@ -5,6 +5,8 @@ No new metrics are computed here; this is purely a presentation layer over
 compute.py's output, kept separate because "how do we summarize this as a
 checklist" is a different concern from "how do we calculate it."
 """
+from __future__ import annotations
+
 from . import config
 
 
@@ -14,9 +16,9 @@ def build_checklist(result: dict) -> list[dict]:
 
     c = result["concentration"]
     items.append({
-        "label": f"No single holding over {config.CONCENTRATION_FLAG_PCT:.0f}% of the portfolio",
+        "label": f"No single holding over {config.CONCENTRATION_FLAG_PCT:.0f}% of the portfolio (diversified funds excluded)",
         "status": "warn" if c["flagged"] else "pass",
-        "detail": f"{c['top_ticker']} is {c['top_pct']:.0f}%" if c["top_ticker"] else "n/a",
+        "detail": f"{c['top_ticker']} is {c['top_pct']:.0f}%" if c["top_ticker"] else "all diversified funds",
     })
 
     items.append({

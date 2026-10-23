@@ -107,14 +107,31 @@ def build_explanations(result: dict[str, Any]) -> dict[str, list[str]]:
     if result.get("effective_holdings") is not None and len(rows) > 1:
         hhi = result.get("hhi")
         hhi_note = f" (Herfindahl-Hirschman index {hhi:.2f})" if hhi is not None else ""
-        out["concentration"].append(
-            f"You hold {len(rows)} positions, but because they're not sized equally, this "
-            f"portfolio behaves like about {result['effective_holdings']:g} evenly sized "
-            f"holdings{hhi_note}, not {len(rows)}. That gap is what concentration risk "
-            f"actually looks like in practice."
-        )
+        eff, n = result["effective_holdings"], len(rows)
+        if eff / n < 0.75:
+            out["concentration"].append(
+                f"You hold {n} positions, but because they're not sized equally, this portfolio "
+                f"behaves like about {eff:g} evenly sized holdings{hhi_note}, not {n}. That gap is "
+                f"what concentration risk actually looks like in practice."
+            )
+        else:
+            out["concentration"].append(
+                f"Your {n} positions are fairly evenly sized: the portfolio behaves like about "
+                f"{eff:g} equal holdings{hhi_note}."
+            )
 
     c = result["concentration"]
+    if not c["top_ticker"] and c.get("fund_pct"):
+        out["concentration"].append(
+            f"Everything here is in diversified funds, so no single company dominates the "
+            f"portfolio. The largest position, {c.get('largest_ticker')} at {c.get('largest_pct', 0):.0f}%, "
+            f"is itself spread across many underlying holdings."
+        )
+    elif c["top_ticker"] and c.get("fund_pct", 0) > 0 and c.get("largest_ticker") != c["top_ticker"]:
+        out["concentration"].append(
+            f"{c['fund_pct']:.0f}% of the portfolio is in diversified funds, which spread risk across "
+            f"many companies; the concentration check below looks at individual stocks only."
+        )
     if c["top_ticker"]:
         if c["flagged"]:
             out["concentration"].append(
@@ -124,7 +141,7 @@ def build_explanations(result: dict[str, Any]) -> dict[str, list[str]]:
             )
         else:
             out["concentration"].append(
-                f"The largest single holding is {c['top_ticker']} at {c['top_pct']:.0f}%, "
+                f"The largest individual stock is {c['top_ticker']} at {c['top_pct']:.0f}%, "
                 f"not an alarming concentration on its own."
             )
 

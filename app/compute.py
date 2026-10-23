@@ -27,6 +27,7 @@ import pandas as pd
 from . import config
 
 TRADING_DAYS_PER_YEAR = 252
+FUND_ASSET_CLASSES = {"ETF", "Mutual fund"}
 
 
 # --------------------------------------------------------------------------
@@ -311,11 +312,22 @@ def compute_portfolio(
             effective_holdings = round(1.0 / hhi, 1)
 
     # --- concentration: single holding, sector, asset class --------------------
-    top = max(rows, key=lambda r: r["weight_pct"]) if rows else None
+    # Single-holding concentration counts individual securities only: 40% in a
+    # total-market fund that owns thousands of companies is not the same risk
+    # as 40% in one company.
+    for r in rows:
+        r["is_fund"] = (r["asset_class"] in FUND_ASSET_CLASSES
+                        or r["sector"].startswith("Diversified fund"))
+    single_names = [r for r in rows if not r["is_fund"]]
+    top = max(single_names, key=lambda r: r["weight_pct"]) if single_names else None
+    largest_any = max(rows, key=lambda r: r["weight_pct"]) if rows else None
     concentration = {
         "top_ticker": top["ticker"] if top else None,
         "top_pct": top["weight_pct"] if top else 0.0,
         "flagged": bool(top and top["weight_pct"] > config.CONCENTRATION_FLAG_PCT),
+        "largest_ticker": largest_any["ticker"] if largest_any else None,
+        "largest_pct": largest_any["weight_pct"] if largest_any else 0.0,
+        "fund_pct": sum(r["weight_pct"] for r in rows if r["is_fund"]),
     }
 
     sector_pct: dict[str, float] = {}

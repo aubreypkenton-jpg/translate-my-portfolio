@@ -93,7 +93,7 @@ SECTION_TERMS = {
 }
 
 
-def relevant_glossary(explanations):
+def relevant_glossary(explanations: dict[str, list[str]]) -> list[tuple[str, str]]:
     """explanations: the dict from explain.build_explanations(). Returns an
     ordered list of (term_key, definition) for terms actually relevant to
     this specific result, so the glossary never lists something unused."""

@@ -7,10 +7,12 @@ twice.
 Kept separate from validation.py: validation asks "is each row well-formed,"
 this asks "should these rows actually be one position." Different concerns.
 """
+from __future__ import annotations
+
 from collections import defaultdict
 
 
-def merge_duplicate_tickers(clean_holdings):
+def merge_duplicate_tickers(clean_holdings: list[dict]) -> tuple[list[dict], list[str]]:
     """clean_holdings: output of validation.validate_holdings (already
     well-formed rows). Returns (merged_holdings, notes) where notes are
     user-facing informational strings (not errors) about what was combined.

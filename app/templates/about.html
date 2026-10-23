@@ -52,9 +52,10 @@
   <h2 id="concentration">Concentration and the Herfindahl-Hirschman index</h2>
   <code class="formula">HHI = Σ weight_i²        effective number of holdings = 1 / HHI</code>
   <p>The HHI is the same index regulators use to measure market concentration. Ten equal holdings give HHI 0.10
-  (10 effective holdings); one holding at 91% gives about 1.2. Flags: any single holding above
-  {{ config.CONCENTRATION_FLAG_PCT|int }}%, or any single sector above {{ config.SECTOR_FLAG_PCT|int }}% (diversified funds
-  are not counted as a "sector"). Asset class (individual stock, ETF, mutual fund) comes from Yahoo's quote type.</p>
+  (10 effective holdings); one holding at 91% gives about 1.2. Flags: any single individual stock above
+  {{ config.CONCENTRATION_FLAG_PCT|int }}%, or any single sector above {{ config.SECTOR_FLAG_PCT|int }}%. Diversified funds
+  (ETFs and mutual funds) are excluded from both checks, because one fund already spreads money across many
+  companies; they still count in the HHI, which measures how evenly <em>your positions</em> are sized. Asset class (individual stock, ETF, mutual fund) comes from Yahoo's quote type.</p>
 
   <h2 id="returns">Compound annual growth rate (CAGR)</h2>
   <code class="formula">CAGR = (ending value / starting value)^(1 / years) − 1        years = trading days / 252</code>
@@ -128,7 +129,7 @@ estimated annual fees = Σ value_i × expense ratio_i</code>
   Commissions, spreads, and taxes are ignored. It shows how the target mix <em>would have</em> behaved, not how it will.</p>
 
   <h2 id="risk">Risk score (0 to 100)</h2>
-  <p>The average of five sub-scores, each scaled to 0 to 100 against a fixed cap: largest holding
+  <p>The average of five sub-scores, each scaled to 0 to 100 against a fixed cap: largest individual stock
   ({{ config.RISK_SCORE_CAPS.concentration|int }}% = 100), largest sector ({{ config.RISK_SCORE_CAPS.sector|int }}%),
   volatility ({{ config.RISK_SCORE_CAPS.volatility|int }}%), highest pairwise correlation (1.0), and max drawdown
   ({{ config.RISK_SCORE_CAPS.drawdown|int }}%). Bands: under 25 Low, under 50 Moderate, under 75 High, otherwise Very High.

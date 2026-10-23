@@ -285,3 +285,28 @@ def test_rebalance_can_drop_a_holding():
     current, prices, hist = _two_asset()
     rb = compute_rebalance(current, {"A": 0.0, "B": 100.0}, prices, {}, hist)
     assert [r["ticker"] for r in rb["target"]["rows"]] == ["B"]
+
+
+def test_index_fund_portfolio_not_flagged_as_concentrated():
+    profiles = {t: {"asset_class": "ETF"} for t in ("VTI", "VXUS", "BND")}
+    r = compute_portfolio([holding("VTI", 40), holding("VXUS", 35), holding("BND", 25)],
+                          {"VTI": 1.0, "VXUS": 1.0, "BND": 1.0}, {}, {}, profiles=profiles)
+    c = r["concentration"]
+    assert c["flagged"] is False and c["top_ticker"] is None
+    assert c["largest_ticker"] == "VTI" and c["fund_pct"] == pytest.approx(100)
+    text = " ".join(build_explanations(r)["concentration"])
+    assert "diversified funds" in text and "concentrated" not in text
+
+
+def test_single_stock_next_to_fund_is_still_flagged():
+    profiles = {"VOO": {"asset_class": "ETF"}, "TSLA": {"asset_class": "Individual stock"}}
+    r = compute_portfolio([holding("VOO", 50), holding("TSLA", 50)], {"VOO": 1.0, "TSLA": 1.0}, {}, {},
+                          profiles=profiles)
+    assert r["concentration"]["top_ticker"] == "TSLA" and r["concentration"]["flagged"] is True
+
+
+def test_hhi_sentence_depends_on_how_uneven():
+    even = compute_portfolio([holding("A", 1), holding("B", 1)], {"A": 1.0, "B": 1.0}, {}, {})
+    lopsided = compute_portfolio([holding("A", 9), holding("B", 1)], {"A": 1.0, "B": 1.0}, {}, {})
+    assert "fairly evenly sized" in " ".join(build_explanations(even)["concentration"])
+    assert "concentration risk" in " ".join(build_explanations(lopsided)["concentration"])
