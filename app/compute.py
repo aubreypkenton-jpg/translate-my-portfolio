@@ -241,6 +241,7 @@ def compute_portfolio(
     benchmark_series: pd.Series | None = None,
     risk_free_rate: float | None = None,
     profiles: dict[str, dict[str, Any]] | None = None,
+    lots: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Compute every metric in the report.
 
@@ -253,6 +254,10 @@ def compute_portfolio(
         benchmark_series: S&P 500 proxy (SPY) closes, same format.
         risk_free_rate: annual rate as a decimal (0.04 = 4%); default in config.
         profiles: optional {ticker: {asset_class, dividend_yield_pct, expense_ratio_pct}}.
+        lots: the individual purchases before duplicate tickers were combined
+            (same keys as holdings). Taxes and recency bias are judged per
+            purchase, because a monthly investor's VOO is many lots with
+            different prices, dates, and tax treatment. Defaults to holdings.
 
     Returns a dict of numbers; explain.py turns it into sentences.
     """
@@ -476,17 +481,26 @@ def compute_portfolio(
 
     # --- behavioral flags ----------------------------------------------------------
     behavioral_flags: list[dict[str, Any]] = []
+    held_tickers = {r["ticker"] for r in rows}
+    lot_list = [lot for lot in (lots if lots is not None else holdings)
+                if lot["ticker"].upper() in held_tickers]
+    worst_runup: dict[str, float] = {}
+    for lot in lot_list:
+        t = lot["ticker"].upper()
+        series = price_histories.get(t)
+        if series is None or series.empty or not lot.get("purchase_date") or not lot.get("purchase_price"):
+            continue
+        s = series.dropna()
+        s_before = s[s.index <= lot["purchase_date"]]
+        if len(s_before) > 30:
+            price_30d_before = s_before.iloc[-31]
+            runup_pct = (float(lot["purchase_price"]) - price_30d_before) / price_30d_before * 100.0
+            if runup_pct > config.RECENCY_BIAS_RUNUP_PCT:
+                worst_runup[t] = max(worst_runup.get(t, 0.0), runup_pct)
     for r in rows:
         t = r["ticker"]
-        series = price_histories.get(t)
-        if series is not None and not series.empty and r["purchase_date"] and r["purchase_price"]:
-            s = series.dropna()
-            s_before = s[s.index <= r["purchase_date"]]
-            if len(s_before) > 30:
-                price_30d_before = s_before.iloc[-31]
-                runup_pct = (r["purchase_price"] - price_30d_before) / price_30d_before * 100.0
-                if runup_pct > config.RECENCY_BIAS_RUNUP_PCT:
-                    behavioral_flags.append({"ticker": t, "type": "recency_bias", "detail": round(runup_pct, 1)})
+        if t in worst_runup:
+            behavioral_flags.append({"ticker": t, "type": "recency_bias", "detail": round(worst_runup[t], 1)})
 
         if (r["gain_loss_pct"] is not None and r["gain_loss_pct"] < config.LOSS_AVERSION_LOSS_PCT
                 and r["holding_days"] is not None and r["holding_days"] > config.LOSS_AVERSION_MIN_HOLD_DAYS):
@@ -497,25 +511,33 @@ def compute_portfolio(
             behavioral_flags.append({"ticker": t, "type": "concentrated_recent_buy",
                                      "detail": round(r["weight_pct"], 1)})
 
-    # --- capital gains (federal, US) ----------------------------------------------
+    # --- capital gains (federal, US), judged PER PURCHASE LOT ---------------------
     tax_flags: list[dict[str, Any]] = []
     tax_summary = {"short_term_gain": 0.0, "short_term_loss": 0.0,
                    "long_term_gain": 0.0, "long_term_loss": 0.0, "has_cost_basis": False}
-    for r in rows:
-        if not r["purchase_date"]:
+    for lot in lot_list:
+        if not lot.get("purchase_date"):
             continue
-        purchased = datetime.strptime(r["purchase_date"], "%Y-%m-%d").date()
+        t = lot["ticker"].upper()
+        price = current_prices.get(t)
+        shares = float(lot["shares"])
+        purchased = datetime.strptime(lot["purchase_date"], "%Y-%m-%d").date()
         term, days_to_lt = holding_term(purchased, as_of)
-        g = r["unrealized_gain"]
+        cost = float(lot["purchase_price"]) if lot.get("purchase_price") else None
+        g = (price - cost) * shares if (cost and price is not None) else None
         status = "unknown" if g is None else ("gain" if g > 0 else ("loss" if g < 0 else "flat"))
         tax_flags.append({
-            "ticker": r["ticker"], "term": term, "holding_days": r["holding_days"],
+            "ticker": t, "term": term, "holding_days": (as_of - purchased).days,
             "days_until_long_term": days_to_lt, "unrealized_gain": g, "status": status,
+            "shares": shares, "purchase_date": lot["purchase_date"], "purchase_price": cost,
         })
         if g is not None:
             tax_summary["has_cost_basis"] = True
             key = ("short_term_" if term == "short-term" else "long_term_") + ("gain" if g >= 0 else "loss")
             tax_summary[key] += g
+    tax_flags.sort(key=lambda f: (f["ticker"], f["purchase_date"]))
+    dated = {f["ticker"] for f in tax_flags}
+    tax_missing_dates = sorted(r["ticker"] for r in rows if r["ticker"] not in dated)
 
     # --- risk score -------------------------------------------------------------------
     risk_score, risk_label = _risk_score(
@@ -551,6 +573,7 @@ def compute_portfolio(
         "behavioral_flags": behavioral_flags,
         "tax_flags": tax_flags,
         "tax_summary": tax_summary,
+        "tax_missing_dates": tax_missing_dates,
         "risk_score": risk_score,
         "risk_label": risk_label,
         "benchmark": benchmark,
@@ -597,7 +620,8 @@ def compute_rebalance(
                                risk_free_rate=risk_free_rate, profiles=profiles)
 
     current_values = {r["ticker"]: r["value"] for r in current["rows"]}
-    tax_by_ticker = {f["ticker"]: f for f in current.get("tax_flags", [])}
+    short_term_gain_tickers = {f["ticker"] for f in current.get("tax_flags", [])
+                               if f["term"] == "short-term" and f["status"] == "gain"}
     trades = []
     for t in sorted(set(current_values) | set(targets_pct)):
         now_v = current_values.get(t, 0.0)
@@ -605,15 +629,14 @@ def compute_rebalance(
         delta = new_v - now_v
         if abs(delta) < 0.005 * max(total, 1):
             continue
-        tf = tax_by_ticker.get(t)
         trades.append({
             "ticker": t,
             "action": "buy" if delta > 0 else "sell",
             "amount": abs(delta),
             "current_pct": now_v / total * 100.0 if total else 0.0,
             "target_pct": targets_pct.get(t, 0.0),
-            "short_term_gain_warning": bool(delta < 0 and tf and tf["term"] == "short-term"
-                                            and tf["status"] == "gain"),
+            # selling may hit lots bought within the last year that are up
+            "short_term_gain_warning": bool(delta < 0 and t in short_term_gain_tickers),
         })
 
     keys = ["effective_holdings", "portfolio_vol", "portfolio_cagr", "portfolio_max_drawdown",

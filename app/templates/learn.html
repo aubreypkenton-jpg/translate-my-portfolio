@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Learn | Translate My Portfolio{% endblock %}
+{% block content %}
+<article>
+  <header class="hero">
+    <p class="eyebrow">Learn by doing</p>
+    <h1>Investing basics, explained with your own portfolio</h1>
+    <p class="tagline">Ten short lessons on the ideas behind every number in the report. Each one points to the part of
+      the report where you can see it in <em>your</em> holdings, and the report recommends the lessons that matter most
+      for what you own.</p>
+    <p class="disclaimer"><strong>Education, not advice.</strong> These lessons explain general concepts; they don't
+      tell you what to buy or sell. Sources are official investor-education sites from the SEC, FINRA, and IRS.</p>
+    <p><a class="btn btn-primary" href="{{ url_for('main.index') }}?example=tech">Try it with an example portfolio</a></p>
+  </header>
+
+  <nav aria-label="Lessons" class="card">
+    <h2 style="margin-top:0">Lessons</h2>
+    <ol class="toc">
+      {% for l in lessons %}<li><a href="#{{ l.id }}">{{ l.title }}</a></li>{% endfor %}
+    </ol>
+  </nav>
+
+  {% for l in lessons %}
+  <section class="card lesson" id="{{ l.id }}" aria-labelledby="{{ l.id }}-h">
+    <p class="eyebrow">Lesson {{ loop.index }}</p>
+    <h2 id="{{ l.id }}-h" style="margin-top:0">{{ l.title }}</h2>
+    <p class="why"><strong>{{ l.why }}</strong></p>
+    {% for p in l.body %}<p>{{ p }}</p>{% endfor %}
+    {% if l.fee_example %}
+      <div class="example-box table-scroll">
+        <table class="data-table">
+          <caption class="sr-only">Ending balance of $10,000 after 30 years at an assumed 7% yearly return, by fee</caption>
+          <thead><tr><th scope="col">Fee / year</th><th scope="col">After 30 years</th><th scope="col">Cost vs. 0.03%</th></tr></thead>
+          <tbody>
+            {% set best = fee_example[0].ending %}
+            {% for row in fee_example %}
+              <tr><th scope="row">{{ '%.2f'|format(row.fee_pct) }}%</th><td>{{ row.ending|money }}</td>
+                <td>{{ (best - row.ending)|money if loop.index > 1 else '–' }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+    {% if l.watch_out %}<p class="callout"><strong>Watch out:</strong> {{ l.watch_out }}</p>{% endif %}
+    <div class="lesson-meta">
+      <span>In your report: {{ l.in_report }}</span>
+    </div>
+    <p class="muted-note">Sources:
+      {% for key in l.sources %}<a href="{{ sources[key][1] }}" rel="noopener">{{ sources[key][0] }}</a>{% if not loop.last %}; {% endif %}{% endfor %}
+    </p>
+  </section>
+  {% endfor %}
+
+  <p><a class="btn btn-primary" href="{{ url_for('main.index') }}">Analyze my own portfolio</a></p>
+</article>
+{% endblock %}

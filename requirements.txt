@@ -4,3 +4,6 @@ pandas>=2.2,<4
 numpy>=1.26,<3
 flask-limiter==4.1.1
 gunicorn==23.0.0
+# security floors for indirect dependencies (flagged by Replit's scanner, Oct 2026)
+certifi>=2026.10.23
+idna>=3.20

@@ -183,7 +183,7 @@ def test_duplicate_input_tickers_fetched_once(monkeypatch):
 
 
 def test_profile_reads_fund_fields(monkeypatch):
-    info = {"quoteType": "ETF", "yield": 0.0125, "netExpenseRatio": 0.03, "shortName": "Some ETF"}
+    info = {"quoteType": "ETF", "yield": 0.0125, "dividendYield": 1.25, "netExpenseRatio": 0.03, "shortName": "Some ETF"}
     monkeypatch.setattr(data_fetch.yf, "Ticker", lambda t: FakeTicker(_sample_hist(), info))
     data_fetch.fetch_holdings_data(["VOO"])
     p = data_fetch.get_cached_profiles(["VOO"])["VOO"]
@@ -193,7 +193,7 @@ def test_profile_reads_fund_fields(monkeypatch):
 
 
 def test_profile_handles_old_expense_ratio_field_and_percent_yield(monkeypatch):
-    info = {"quoteType": "MUTUALFUND", "dividendYield": 1.8, "annualReportExpenseRatio": 0.0004}
+    info = {"quoteType": "MUTUALFUND", "trailingAnnualDividendYield": 0.018, "annualReportExpenseRatio": 0.0004}
     monkeypatch.setattr(data_fetch.yf, "Ticker", lambda t: FakeTicker(_sample_hist(), info))
     data_fetch.fetch_holdings_data(["VTSAX"])
     p = data_fetch.get_cached_profiles(["VTSAX"])["VTSAX"]
@@ -230,3 +230,29 @@ def test_is_provider_error_classification():
     assert data_fetch._is_provider_error(TimeoutError())
     assert data_fetch._is_provider_error(FakeRateLimitError())
     assert not data_fetch._is_provider_error(ValueError())
+
+
+# ---- dividend yield units (bug found on live Yahoo data: AAPL showed 31%) ----
+
+@pytest.mark.parametrize("info,price,expected", [
+    ({"dividendYield": 0.41}, 250.0, 0.41),                       # Yahoo's percent field, used as-is
+    ({"dividendRate": 1.04, "dividendYield": 0.41}, 260.0, 0.40),  # dollars / price wins
+    ({"yield": 0.0115}, 600.0, 1.15),                              # fund fraction field
+    ({"trailingAnnualDividendYield": 0.0071}, None, 0.71),
+    ({"dividendYield": 99.0}, None, None),                          # implausible -> dropped
+    ({}, 100.0, None),
+])
+def test_dividend_yield_units(info, price, expected):
+    got = data_fetch._dividend_yield_pct(info, price)
+    if expected is None:
+        assert got is None
+    else:
+        assert got == pytest.approx(expected, abs=0.01)
+
+
+def test_low_yield_stock_not_inflated_100x(monkeypatch):
+    # live AAPL returned dividendYield=0.31 (percent); v1 logic showed 31%
+    info = {"quoteType": "EQUITY", "sector": "Technology", "dividendYield": 0.31}
+    monkeypatch.setattr(data_fetch.yf, "Ticker", lambda t: FakeTicker(_sample_hist(), info))
+    data_fetch.fetch_holdings_data(["AAPL"])
+    assert data_fetch.get_cached_profiles(["AAPL"])["AAPL"]["dividend_yield_pct"] == pytest.approx(0.31)

@@ -275,8 +275,17 @@ def build_explanations(result: dict[str, Any]) -> dict[str, list[str]]:
                                                      detail_abs=abs(flag["detail"])))
 
     # --- tax ------------------------------------------------------------------------------
+    by_ticker: dict[str, list[dict[str, Any]]] = {}
     for tf in result["tax_flags"]:
-        out["tax"].append(_tax_line(tf))
+        by_ticker.setdefault(tf["ticker"], []).append(tf)
+    for lots in by_ticker.values():
+        out["tax"].append(_tax_line(lots[0]) if len(lots) == 1 else _multi_lot_tax_line(lots))
+    missing = result.get("tax_missing_dates") or []
+    if missing and result["tax_flags"]:
+        out["tax"].append(
+            f"No purchase dates for {', '.join(missing)}, so their tax status isn't shown. "
+            f"Add one row per purchase (or upload your brokerage's file) to include them."
+        )
     summary = result.get("tax_summary") or {}
     if summary.get("has_cost_basis"):
         out["tax"].append(
@@ -346,3 +355,30 @@ def _tax_line(tf: dict[str, Any]) -> str:
     amount = f" on about {_money(gain)} of gain" if status == "gain" else ""
     return (f"{t}: held {days} days (a year or less). If you sold today{amount}, any gain would be "
             f"taxed as short-term, at your ordinary income tax rate, which is usually higher.{wait_note}")
+
+
+def _multi_lot_tax_line(lots: list[dict[str, Any]]) -> str:
+    """Summary for a position bought in several purchases (e.g. monthly investing).
+
+    Each purchase is its own tax lot: some may be long-term and others
+    short-term at the same time.
+    """
+    t = lots[0]["ticker"]
+    lt = [x for x in lots if x["term"] == "long-term"]
+    st = [x for x in lots if x["term"] == "short-term"]
+
+    def part(group: list[dict[str, Any]], label: str) -> str:
+        n = len(group)
+        gains = [x["unrealized_gain"] for x in group if x["unrealized_gain"] is not None]
+        amt = f" ({_money(sum(gains))} unrealized)" if gains else ""
+        return f"{n} {label}{amt}"
+
+    pieces = [p for p, g in ((part(lt, "long-term"), lt), (part(st, "short-term"), st)) if g]
+    line = f"{t}: {len(lots)} separate purchases, each taxed on its own: {' and '.join(pieces)}."
+    waits = [x["days_until_long_term"] for x in st if x["days_until_long_term"]]
+    if waits:
+        line += f" The next purchase turns long-term in {min(waits)} day(s)."
+    if st and lt:
+        line += (" If you sell only part of it, which shares count as sold matters; many brokerages "
+                 "default to the oldest shares first (FIFO), and some let you pick specific lots.")
+    return line

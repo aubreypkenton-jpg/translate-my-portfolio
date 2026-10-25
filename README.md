@@ -1,7 +1,7 @@
 # Translate My Portfolio
 
 [![CI](https://github.com/aubreypkenton-jpg/translate-my-portfolio/actions/workflows/test.yml/badge.svg)](https://github.com/aubreypkenton-jpg/translate-my-portfolio/actions/workflows/test.yml)
-![Tests](https://img.shields.io/badge/tests-209%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-252%20passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
@@ -24,7 +24,9 @@ sentence is a fixed template: there is **no generative AI anywhere** in the calc
 | Hidden overlap | Correlation heatmap and plain-English flags for holdings that move together |
 | Crash history | What this exact mix did in the 2020 COVID crash and the 2022 bear market, next to the S&P 500 |
 | Funds | Expense-ratio and dividend-yield flags for ETFs and mutual funds, estimated annual fees |
-| Taxes | Short- vs long-term status (IRS "more than one year" rule), days until long-term, unrealized gain or loss, wash-sale note |
+| Taxes | Per-purchase (tax lot) short- vs long-term status (IRS "more than one year" rule), days until long-term, unrealized gain or loss, wash-sale note |
+| Import | Typed rows, a simple CSV, a brokerage positions/lots export, or a transaction history (rebuilt into current lots with FIFO) |
+| Learn | Ten beginner lessons tied to report sections, with lessons recommended from your own report's flags and sources from the SEC, FINRA and IRS |
 | Behavior | Recency bias, loss aversion, and "fast, big bet" flags from your own purchase dates and prices |
 | What if I rebalance? | Trades needed to reach target weights and a before/after comparison of every metric |
 
@@ -37,7 +39,7 @@ No login, nothing stored, no brokerage connection, and no incentive to get anyon
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
 python run.py                                       # http://localhost:8080
-pytest                                              # 209 tests, coverage gate 85%
+pytest                                              # 252 tests, coverage gate 85%
 ruff check .                                        # lint
 ```
 

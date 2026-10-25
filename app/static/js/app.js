@@ -41,6 +41,9 @@
         if (!ex) return;
         body.innerHTML = '';
         ex.holdings.forEach(addRow);
+        const hasDetails = ex.holdings.some(function (h) { return h.purchase_price || h.purchase_date; });
+        const box = document.getElementById('show-details');
+        if (box) { box.checked = hasDetails; box.dispatchEvent(new Event('change')); }
         document.getElementById('holdings-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
     });
@@ -52,6 +55,22 @@
       btn.disabled = true;
     });
   }
+
+  // ---- optional cost/date columns ----
+  const detailsBox = document.getElementById('show-details');
+  const table = document.getElementById('holdings-table');
+  if (detailsBox && table) {
+    detailsBox.addEventListener('change', function () {
+      table.classList.toggle('hide-details', !detailsBox.checked);
+    });
+  }
+
+  // ?example=tech on the URL pre-fills that example (used by the Learn page)
+  try {
+    const exId = new URLSearchParams(window.location.search).get('example');
+    const exBtn = exId && document.querySelector('.example-btn[data-example="' + CSS.escape(exId) + '"]');
+    if (exBtn) exBtn.click();
+  } catch (e) { /* older browsers: ignore */ }
 
   // ---- rebalance helpers ----
   const targets = Array.from(document.querySelectorAll('.target-input'));
