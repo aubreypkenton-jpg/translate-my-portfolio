@@ -53,8 +53,9 @@ def merge_duplicate_tickers(clean_holdings: list[dict]) -> tuple[list[dict], lis
             "purchase_date": latest_date,
         })
         notes.append(
-            f"Combined {len(rows)} rows for {ticker} into one position "
-            f"({total_shares:g} shares total)."
+            f"Combined {len(rows)} purchases of {ticker} into one position "
+            f"({total_shares:g} shares total) for the risk numbers; the tax section "
+            f"still treats each purchase separately."
             + ("" if weighted_price is not None else
                " Cost basis left blank since not every row had a purchase price.")
         )

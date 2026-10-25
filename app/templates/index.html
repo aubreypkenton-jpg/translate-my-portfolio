@@ -4,8 +4,8 @@
   <tr class="holding-row">
     <td data-label="Ticker"><input type="text" name="ticker" placeholder="AAPL" aria-label="Ticker symbol" value="{{ h.get('ticker') or '' }}" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="15"></td>
     <td data-label="Shares"><input type="text" inputmode="decimal" name="shares" placeholder="10" aria-label="Number of shares" value="{{ h.get('shares')|clean_num }}"></td>
-    <td data-label="Price paid (optional)"><input type="text" inputmode="decimal" name="purchase_price" placeholder="150.00" aria-label="Price you paid per share (optional)" value="{{ h.get('purchase_price')|clean_num }}"></td>
-    <td data-label="Date bought (optional)"><input type="date" name="purchase_date" aria-label="Date you bought it (optional)" value="{{ h.get('purchase_date') or '' }}"></td>
+    <td data-label="Average cost per share" class="detail-col"><input type="text" inputmode="decimal" name="purchase_price" placeholder="150.00" aria-label="Average cost per share (optional)" value="{{ h.get('purchase_price')|clean_num }}"></td>
+    <td data-label="Date bought" class="detail-col"><input type="date" name="purchase_date" aria-label="Date bought (optional)" value="{{ h.get('purchase_date') or '' }}"></td>
     <td class="remove-cell"><button type="button" class="remove-row" aria-label="Remove this holding">&times;</button></td>
   </tr>
 {% endmacro %}
@@ -47,14 +47,19 @@
     </div>
 
     <form method="POST" action="{{ url_for('main.analyze') }}" id="holdings-form" aria-label="Enter your holdings" enctype="multipart/form-data">
-      <table class="entry-table" id="holdings-table">
+      {% set has_details = holdings|selectattr('purchase_price')|list or holdings|selectattr('purchase_date')|list %}
+      <label class="details-toggle">
+        <input type="checkbox" id="show-details" {% if has_details %}checked{% endif %}>
+        Add cost and purchase dates <span class="opt">(optional: unlocks gains, taxes and buying-pattern checks)</span>
+      </label>
+      <table class="entry-table{% if not has_details %} hide-details{% endif %}" id="holdings-table">
         <caption class="sr-only">Your holdings: ticker, shares, purchase price, and purchase date</caption>
         <thead>
           <tr>
             <th scope="col">Ticker</th>
             <th scope="col">Shares</th>
-            <th scope="col">Price you paid <span class="opt">(optional)</span></th>
-            <th scope="col">Date you bought <span class="opt">(optional)</span></th>
+            <th scope="col" class="detail-col">Average cost per share</th>
+            <th scope="col" class="detail-col">Date bought</th>
             <th scope="col"><span class="sr-only">Remove</span></th>
           </tr>
         </thead>
@@ -63,6 +68,9 @@
         </tbody>
       </table>
       <button type="button" id="add-row" class="btn-small">+ Add another holding</button>
+      <p class="field-help detail-help">Your brokerage shows "average cost" on each position's page. Bought at different
+        times? Add <strong>one row per purchase</strong> with the same ticker, or upload your brokerage's file below; the
+        tax section then judges each purchase separately.</p>
 
       <details class="advanced"{% if risk_free_pct != 4.0 %} open{% endif %}>
         <summary>More options: CSV upload, risk-free rate</summary>
@@ -70,7 +78,9 @@
           <div>
             <label for="csv_file">Upload a CSV <span class="opt">(adds to the rows above)</span></label>
             <input type="file" id="csv_file" name="csv_file" accept=".csv,text/csv">
-            <span class="field-help">Columns: <code>ticker, shares, purchase_price, purchase_date</code>. Only ticker and shares are required.</span>
+            <span class="field-help">Works with a simple list (<code>ticker, shares, average cost, date</code>), a brokerage
+              positions or tax-lots export, or a transaction history such as a brokerage account activity report
+              (buys and sells are turned into what you hold now).</span>
           </div>
           <div>
             <label for="risk_free_rate">Risk-free rate (% per year)</label>
@@ -142,6 +152,16 @@
         </ul>
       {% endif %}
 
+      {% if lesson_recs %}
+        <h3>Recommended lessons for this portfolio</h3>
+        <ul class="lesson-recs">
+          {% for rec in lesson_recs %}
+            <li><a href="{{ url_for('main.learn') }}#{{ rec.id }}"><strong>{{ rec.title }}</strong></a><br>
+              <span class="muted-note">Why: {{ rec.reason }}</span></li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+
       <h3>Holdings</h3>
       <div class="table-scroll">
         <table class="data-table holdings-summary">
@@ -201,17 +221,17 @@
     </div>
 
     {% if ex.concentration %}
-      <h2>Concentration</h2>
+      <h2>Concentration <a class="learn-link" href="{{ url_for('main.learn') }}#diversification">Learn</a></h2>
       <div class="section-text">{% for line in ex.concentration %}<p>{{ line }}</p>{% endfor %}</div>
     {% endif %}
 
     {% if ex.funds %}
-      <h2>Fund fees and dividends</h2>
+      <h2>Fund fees and dividends <a class="learn-link" href="{{ url_for('main.learn') }}#fees">Learn</a></h2>
       <div class="section-text">{% for line in ex.funds %}<p>{{ line }}</p>{% endfor %}</div>
     {% endif %}
 
     {% if ex.volatility %}
-      <h2>Volatility and risk-adjusted return</h2>
+      <h2>Volatility and risk-adjusted return <a class="learn-link" href="{{ url_for('main.learn') }}#risk-adjusted">Learn</a></h2>
       <div class="section-text">{% for line in ex.volatility %}<p>{{ line }}</p>{% endfor %}</div>
     {% endif %}
 
@@ -221,7 +241,7 @@
     {% endif %}
 
     {% if ex.correlation or result.correlation_matrix %}
-      <h2>Hidden overlap (correlation)</h2>
+      <h2>Hidden overlap (correlation) <a class="learn-link" href="{{ url_for('main.learn') }}#correlation">Learn</a></h2>
       <div class="section-text">
         {% for line in ex.correlation %}<p>{{ line }}</p>{% endfor %}
         {% if not ex.correlation %}<p>No pair of holdings is highly correlated (above {{ '%.1f'|format(0.7) }}).</p>{% endif %}
@@ -233,25 +253,28 @@
     {% endif %}
 
     {% if ex.drawdown %}
-      <h2>What real crashes would have done to this</h2>
+      <h2>What real crashes would have done to this <a class="learn-link" href="{{ url_for('main.learn') }}#risk">Learn</a></h2>
       <div class="section-text">{% for line in ex.drawdown %}<p>{{ line }}</p>{% endfor %}</div>
     {% endif %}
 
     {% if ex.behavioral %}
-      <h2>Your buying patterns</h2>
+      <h2>Your buying patterns <a class="learn-link" href="{{ url_for('main.learn') }}#dca">Learn</a></h2>
       <div class="section-text">{% for line in ex.behavioral %}<p>{{ line }}</p>{% endfor %}</div>
     {% endif %}
 
     {% if result.tax_flags %}
-      <h2>Capital gains basics</h2>
+      <h2>Capital gains basics <a class="learn-link" href="{{ url_for('main.learn') }}#taxes">Learn</a></h2>
+      <p class="muted-note">One row per purchase: shares bought on different dates are taxed separately.</p>
       <div class="table-scroll">
         <table class="data-table">
-          <caption class="sr-only">Holding period and unrealized gain or loss per position</caption>
-          <thead><tr><th scope="col">Ticker</th><th scope="col">Held</th><th scope="col" class="text">If sold today</th><th scope="col">Unrealized</th><th scope="col">Long-term in</th></tr></thead>
+          <caption class="sr-only">Holding period and unrealized gain or loss for each purchase</caption>
+          <thead><tr><th scope="col">Ticker</th><th scope="col">Bought</th><th scope="col">Shares</th><th scope="col">Held</th><th scope="col" class="text">If sold today</th><th scope="col">Unrealized</th><th scope="col">Long-term in</th></tr></thead>
           <tbody>
           {% for tf in result.tax_flags %}
             <tr>
               <th scope="row">{{ tf.ticker }}</th>
+              <td>{{ tf.purchase_date }}</td>
+              <td>{{ tf.shares|clean_num }}</td>
               <td>{{ tf.holding_days }} days</td>
               <td class="text">{{ tf.term|capitalize }}</td>
               <td class="{{ 'pos' if tf.status == 'gain' else ('neg' if tf.status == 'loss' else '') }}">{{ tf.unrealized_gain|money(signed=True) }}</td>

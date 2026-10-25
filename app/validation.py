@@ -15,7 +15,8 @@ from datetime import date, datetime, timezone
 # 0700.HK, ^GSPC (index), EURUSD=X (currency). 1-15 characters.
 TICKER_RE = re.compile(r"^\^?[A-Z0-9][A-Z0-9.\-=]{0,14}$")
 
-MAX_HOLDINGS = 50          # keeps one request from hammering the free data source
+MAX_HOLDINGS = 50          # distinct tickers; keeps one request from hammering the free data source
+MAX_LOTS = 2000            # individual purchase rows (monthly investing for decades fits)
 MAX_SHARES = 1e9           # anything above this is almost certainly a typo
 MAX_PRICE = 1e7
 EARLIEST_DATE = date(1970, 1, 1)
@@ -107,10 +108,21 @@ def validate_holdings(raw_holdings: list[dict]) -> tuple[list[dict], list[tuple[
             "purchase_date": purchase_date,
         })
 
-    if len(clean) > MAX_HOLDINGS:
-        errors.append((MAX_HOLDINGS, f"Only the first {MAX_HOLDINGS} holdings were analyzed; "
-                                     f"the free data source can't handle more in one go."))
-        clean = clean[:MAX_HOLDINGS]
+    # Cap distinct tickers (each one is a network fetch), not rows: a monthly
+    # investor can have hundreds of purchase lots of just a few funds.
+    kept: list[dict] = []
+    seen: set[str] = set()
+    dropped: set[str] = set()
+    for row in clean:
+        if row["ticker"] not in seen and len(seen) >= MAX_HOLDINGS:
+            dropped.add(row["ticker"])
+            continue
+        seen.add(row["ticker"])
+        kept.append(row)
+    if dropped or len(kept) > MAX_LOTS:
+        errors.append((MAX_HOLDINGS, f"Only the first {MAX_HOLDINGS} different holdings (and {MAX_LOTS} "
+                                     f"purchases) were analyzed; the free data source can't handle more in one go."))
+    clean = kept[:MAX_LOTS]
 
     return clean, errors
 

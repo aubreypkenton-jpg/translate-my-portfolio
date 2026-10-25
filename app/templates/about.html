@@ -108,8 +108,11 @@ estimated annual fees = Σ value_i × expense ratio_i</code>
   <p>A position is <strong>long-term</strong> if held <em>more than one year</em>. The holding period starts the day after
   purchase, so shares bought January 10, 2023 become long-term on January 11, 2024. Short-term gains are taxed as
   ordinary income; long-term gains get lower rates (0%, 15% or 20% federally, depending on income). Unrealized gain
-  = (current price − price paid) × shares. If several lots of the same ticker are entered, they're combined at a
-  weighted-average cost, and the most recent purchase date is used (the conservative choice). Losses can offset gains,
+  = (current price − price paid) × shares. Each purchase is its own <em>tax lot</em>: if you enter several rows (or upload a
+  history) for the same ticker, the risk numbers combine them at a weighted-average cost, but the tax table judges every
+  purchase separately, so one recent buy can't make years-old shares look short-term. A transaction-history upload is
+  turned into current lots by matching each sale to the oldest shares first (FIFO); stock splits and transfers in are
+  not applied automatically and are flagged. Losses can offset gains,
   subject to the wash-sale rule (no buying a substantially identical security within 30 days before or after the sale).
   Sources: <a href="https://www.irs.gov/publications/p550" rel="noopener">IRS Publication 550</a>,
   <a href="https://www.irs.gov/taxtopics/tc409" rel="noopener">IRS Topic 409</a>.

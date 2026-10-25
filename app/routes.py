@@ -16,13 +16,14 @@ from . import config
 from .chart_data import build_chart_data
 from .checklist import build_checklist
 from .compute import compute_portfolio, compute_rebalance
-from .csv_import import parse_csv
+from .csv_import import parse_csv_with_notes
 from .data_fetch import DataProviderError, fetch_benchmark, fetch_holdings_data, get_cached_profiles
 from .examples import EXAMPLE_PORTFOLIOS
 from .explain import build_explanations
 from .export import build_export_json, build_summary_text
 from .extensions import limiter
 from .glossary import relevant_glossary
+from .lessons import FEE_EXAMPLE, LESSONS, SOURCES, recommend_lessons
 from .normalize import merge_duplicate_tickers
 from .validation import parse_risk_free_rate, validate_holdings, validate_targets
 
@@ -42,7 +43,7 @@ def _context(**overrides: Any) -> dict[str, Any]:
         result=None, explanations=None, errors=[], notes=[], failed=[],
         chart_data=None, glossary=[], checklist=[], summary_text=None, export_data=None,
         holdings=[], risk_free_pct=config.RISK_FREE_RATE * 100.0, rebalance=None,
-        rebalance_errors=[], targets={}, examples=EXAMPLE_PORTFOLIOS,
+        rebalance_errors=[], targets={}, examples=EXAMPLE_PORTFOLIOS, lesson_recs=[],
     )
     ctx.update(overrides)
     return ctx
@@ -59,6 +60,12 @@ def health():
     NOT call Yahoo: the app is "up" even if the data provider is having a bad
     minute, and a health check shouldn't burn rate-limit budget."""
     return jsonify(status="ok"), 200
+
+
+@bp.route("/learn")
+def learn():
+    """Beginner lessons, each linked to the report section it explains."""
+    return render_template("learn.html", lessons=LESSONS, sources=SOURCES, fee_example=FEE_EXAMPLE)
 
 
 @bp.route("/about")
@@ -78,11 +85,13 @@ def analyze():
     ]
 
     errors: list[str] = []
+    import_notes: list[str] = []
     csv_file = request.files.get("csv_file")
     if csv_file and csv_file.filename:
-        csv_holdings, csv_errors = parse_csv(csv_file.stream)
+        csv_holdings, csv_errors, csv_notes = parse_csv_with_notes(csv_file.stream)
         raw_holdings.extend(csv_holdings)
         errors.extend(csv_errors)
+        import_notes.extend(csv_notes)
         if csv_holdings:
             logger.info("Parsed %d holding(s) from uploaded CSV", len(csv_holdings))
 
@@ -101,6 +110,7 @@ def analyze():
                                                         risk_free_pct=rf * 100))
 
     merged_holdings, notes = merge_duplicate_tickers(clean_holdings)
+    notes = import_notes + notes
     unique_tickers = sorted({h["ticker"].upper() for h in merged_holdings})
     logger.info("Analyzing %d holding(s): %s", len(merged_holdings), unique_tickers)
 
@@ -120,9 +130,10 @@ def analyze():
             errors=errors, failed=failed, holdings=merged_holdings, risk_free_pct=rf * 100))
 
     today = datetime.now(timezone.utc)
+    usable_lots = [h for h in clean_holdings if h["ticker"].upper() in current_prices]
     result = compute_portfolio(usable_holdings, current_prices, sectors, price_histories,
                                today=today, benchmark_series=benchmark_series,
-                               risk_free_rate=rf, profiles=profiles)
+                               risk_free_rate=rf, profiles=profiles, lots=usable_lots)
 
     # optional "what if I rebalance?" comparison, submitted from the results page
     rebalance = None
@@ -156,8 +167,9 @@ def analyze():
             checklist=checklist,
             summary_text=build_summary_text(result),
             export_data=build_export_json(result, checklist),
-            holdings=usable_holdings, risk_free_pct=rf * 100,
+            holdings=usable_lots, risk_free_pct=rf * 100,
             rebalance=rebalance, rebalance_errors=rebalance_errors, targets=targets,
+            lesson_recs=recommend_lessons(result),
         ),
     )
 
